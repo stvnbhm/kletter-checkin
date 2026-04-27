@@ -1,0 +1,58 @@
+# docker-compose.yml
+
+services:
+  app:
+    image: kletter-checkin
+    container_name: kletter-app
+    restart: unless-stopped
+    volumes:
+      - .:/var/www/html
+    depends_on:
+      - db
+    networks:
+      - kletternet
+    environment:
+      - TZ=Europe/Vienna
+
+  nginx:
+    image: nginx:alpine
+    container_name: kletter-nginx
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - .:/var/www/html
+      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - app
+    networks:
+      - kletternet
+
+  db:
+    image: mysql:8.0
+    container_name: kletter-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: klettercheckin
+      MYSQL_USER: checkinuser
+      MYSQL_PASSWORD: BeispielPasswort123!
+      MYSQL_ROOT_PASSWORD: BeispielPasswort123!
+    volumes:
+      - dbdata:/var/lib/mysql
+    networks:
+      - kletternet
+  
+  node:
+    image: node:20-alpine
+    working_dir: /var/www
+    volumes:
+      - .:/var/www
+    profiles: ["build"]
+
+volumes:
+  dbdata:
+
+networks:
+  kletternet:
+    driver: bridge
+    

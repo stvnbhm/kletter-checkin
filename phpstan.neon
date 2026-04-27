@@ -1,0 +1,9 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    paths:
+        - app/
+        - routes/
+        - database/
+    level: 5 # Starte mit 5, erhöhe später bis auf 9 für strengere Prüfungen
