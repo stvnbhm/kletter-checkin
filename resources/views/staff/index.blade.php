@@ -157,7 +157,7 @@
 
                         $kulanzHint = match (true) {
                             $registration->access_status === 'red' => 'Person gesperrt',
-                            $isTrialLimitReached                   => 'Schnupperlimit erreicht (' . $visits . '/3)',
+                            $isTrialLimitReached                   => 'Schnupperlimit erreicht (' . $visits . ')',
                             default                                => 'Aktion erforderlich',
                         };
                         $hintIcon  = $registration->access_status === 'red' ? '🚫' : '⚠️';
