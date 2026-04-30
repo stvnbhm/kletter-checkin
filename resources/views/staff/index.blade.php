@@ -243,7 +243,7 @@
                                     🚫 {{ $isTrialMaxReached ? 'Schnupperlimit ausgeschöpft (3/3)' : 'Kein Zutritt möglich' }}
                                 </span>
                             @elseif ($needsKulanz)
-                                <form method="POST" action="{{ route('staff.kulanz', $registration) }}"
+                                <form method="POST" action="{{ route('staff.kulanz-checkin', $registration) }}"
                                     class="flex flex-col gap-2">
                                     @csrf
                                     <span class="text-xs font-semibold {{ $hintColor }}">
@@ -314,7 +314,7 @@
 
                                     $kulanzHint = match (true) {
                                         $registration->access_status === 'red' => 'Person gesperrt',
-                                        $isTrialLimitReached                   => 'Schnupperlimit erreicht (' . $visits . '/3)',
+                                        $isTrialLimitReached                   => 'Schnupperlimit erreicht (' . $visits . ')',
                                         default                                => 'Aktion erforderlich',
                                     };
                                     $hintIcon  = $registration->access_status === 'red' ? '🚫' : '⚠️';
@@ -410,7 +410,7 @@
                                                 <span class="text-xs font-semibold {{ $hintColor }}">
                                                     {{ $hintIcon }} {{ $kulanzHint }}
                                                 </span>
-                                                <form method="POST" action="{{ route('staff.kulanz', $registration) }}"
+                                                <form method="POST" action="{{ route('staff.kulanz-checkin', $registration) }}"
                                                     class="flex flex-col gap-1.5">
                                                     @csrf
                                                     <input type="text" name="reason"

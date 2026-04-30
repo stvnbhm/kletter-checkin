@@ -35,8 +35,8 @@ services:
     environment:
       MYSQL_DATABASE: klettercheckin
       MYSQL_USER: checkinuser
-      MYSQL_PASSWORD: ${DB_PASSWORD}       # aus .env – nicht hardcoded!
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_PASSWORD: ${DB_PASSWORD}              # aus .env – nicht hardcoded!
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}    # aus .env – nicht hardcoded!
     volumes:
       - dbdata:/var/lib/mysql
     networks:

@@ -6,6 +6,7 @@ use App\Models\Checkin;
 use App\Models\Member;
 use App\Models\Registration;
 use Carbon\Carbon;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -230,6 +231,45 @@ class StaffController extends Controller
         return redirect()
             ->route('staff')
             ->with('success', 'Kulanz gewährt für ' . e($registration->first_name) . '!');
+    }
+    
+        /**
+     * Kulanz erteilen UND sofort Check-in durchführen (für orange-Status).
+     */
+    public function kulanzCheckin(Request $request, Registration $registration): RedirectResponse
+    {
+        $request->validate([
+            'reason' => 'required|string|max:255',
+        ]);
+    
+        $reason = strip_tags($request->reason);
+    
+        $registration->load('currentCheckin');
+        if ($registration->currentCheckin) {
+            return redirect()
+                ->route('staff')
+                ->with('error', e($registration->first_name) . ' ist bereits eingecheckt.');
+        }
+    
+        // 1. Kulanz erteilen
+        $registration->update([
+            'manual_exception_reason' => $reason,
+            'manual_exception_until'  => now()->endOfDay(),
+            'access_status'           => 'orange',
+            'access_reason'           => 'Kulanz: ' . $reason,
+        ]);
+    
+        // 2. Check-in sofort durchführen
+        Checkin::create([
+            'registration_id' => $registration->id,
+            'checked_in_at'   => now(),
+        ]);
+    
+        $registration->increment('trial_visits_count');
+    
+        return redirect()
+            ->route('staff')
+            ->with('success', '✓ Kulanz erteilt & ' . e($registration->first_name) . ' ' . e($registration->last_name) . ' eingecheckt.');
     }
 
     public function confirmParentConsent(Registration $registration)

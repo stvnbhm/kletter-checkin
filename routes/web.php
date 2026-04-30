@@ -36,6 +36,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/staff/check-in/{registration}', [StaffController::class, 'checkin'])->name('staff.checkin');
     Route::post('/staff/import-members', [StaffController::class, 'importMembers'])->name('staff.importMembers');
     Route::post('/staff/kulanz/{registration}', [StaffController::class, 'grantKulanz'])->name('staff.kulanz');
+    Route::post('/staff/{registration}/kulanz-checkin', [StaffController::class, 'kulanzCheckin'])->name('staff.kulanz-checkin');
     Route::post('/staff/{registration}/parent-consent', [StaffController::class, 'confirmParentConsent'])->name('staff.parent-consent');
     Route::post('/verify/{token}/checkin', [RegistrationController::class, 'checkin'])->name('verify.checkin');
 
