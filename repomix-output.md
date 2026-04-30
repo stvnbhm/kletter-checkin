@@ -152,7 +152,6 @@ resources/
     layouts/
       app.blade.php
       guest.blade.php
-      navigation.blade Kopie.php
       navigation.blade.php
     profile/
       partials/
@@ -161,6 +160,8 @@ resources/
         update-profile-information-form.blade.php
       edit.blade.php
     staff/
+      aindex.blade.php
+      bindex.blade.php
       index.blade.php
     dashboard.blade.php
     register.blade.php
@@ -214,6 +215,8 @@ artisan
 composer.json
 docker-compose.yml
 Dockerfile
+Dockerfile.old
+kletterdom-deployment-anleitung.md
 package.json
 phpstan.neon
 phpunit.xml
@@ -965,59 +968,58 @@ class AdminController extends Controller
     {
         $from = $request->input('from') ? Carbon::parse($request->input('from'))->startOfDay() : Carbon::now()->subDays(30)->startOfDay();
         $to   = $request->input('to')   ? Carbon::parse($request->input('to'))->endOfDay()     : Carbon::now()->endOfDay();
-
+    
         $checkins = Checkin::with('registration')
             ->whereBetween('checked_in_at', [$from, $to])
             ->orderBy('checked_in_at')
             ->get();
-
+    
         $filename = 'checkins_' . $from->format('Ymd') . '_' . $to->format('Ymd') . '.csv';
-
+    
         $headers = [
             'Content-Type'        => 'text/csv; charset=UTF-8',
             'Content-Disposition' => 'attachment; filename="' . $filename . '"',
         ];
-
+    
         $callback = function () use ($checkins) {
             $handle = fopen('php://output', 'w');
-            // BOM für Excel-Kompatibilität
             fwrite($handle, "\xEF\xBB\xBF");
-
+    
             fputcsv($handle, [
                 'Check-in ID',
                 'Vorname',
                 'Nachname',
+                'Geburtsdatum',
                 'Mitgliedstyp',
                 'Mitgliedsnummer',
                 'Check-in Zeit',
-                'Check-out Zeit',
-                'Dauer (Min)',
                 'Ampelstatus',
+                'Zugangsstatus-Grund',
+                'Schnupperbesuche',
+                'Aufsicht erforderlich',
             ], ';');
-
+    
             foreach ($checkins as $c) {
-                $reg      = $c->registration;
-                $duration = $c->checked_out_at
-                    ? Carbon::parse($c->checked_in_at)->diffInMinutes($c->checked_out_at)
-                    : null;
-
-                // HIER WAREN VORHER NOCH NAMEN OHNE UNTERSTRICH
+                $reg = $c->registration;
+    
                 fputcsv($handle, [
                     $c->id,
-                    $reg->first_name ?? '',
-                    $reg->last_name  ?? '',
+                    $reg->first_name  ?? '',
+                    $reg->last_name   ?? '',
+                    $reg->birth_date  ? Carbon::parse($reg->birth_date)->format('d.m.Y') : '',
                     $reg->member_type === 'member' ? 'Mitglied' : 'Gast',
                     $reg->member_number ?? '',
                     Carbon::parse($c->checked_in_at)->format('d.m.Y H:i'),
-                    $c->checked_out_at ? Carbon::parse($c->checked_out_at)->format('d.m.Y H:i') : '',
-                    $duration ?? '',
                     $reg->access_status ?? '',
+                    $reg->access_reason ?? '',
+                    $reg->member_type === 'guest' ? ($reg->trial_visits_count ?? 0) : '',
+                    $reg->needs_supervision ? 'Ja' : 'Nein',
                 ], ';');
             }
-
+    
             fclose($handle);
         };
-
+    
         return response()->stream($callback, 200, $headers);
     }
 
@@ -4160,7 +4162,7 @@ server {
     location ~ \.php$ {
         fastcgi_pass app:9000;
         fastcgi_index index.php;
-        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
         include fastcgi_params;
     }
 
@@ -4168,37 +4170,6 @@ server {
         deny all;
     }
 }
-````
-
-## File: docker/supervisord.conf
-````ini
-[supervisord]
-nodaemon=true
-logfile=/dev/null
-logfile_maxbytes=0
-
-[program:php-fpm]
-command=php-fpm
-autostart=true
-autorestart=true
-stdout_logfile=/dev/stdout
-stdout_logfile_maxbytes=0
-stderr_logfile=/dev/stderr
-stderr_logfile_maxbytes=0
-
-[program:nginx]
-command=nginx -g "daemon off;"
-autostart=true
-autorestart=true
-stdout_logfile=/dev/stdout
-stdout_logfile_maxbytes=0
-stderr_logfile=/dev/stderr
-stderr_logfile_maxbytes=0
-
-[program:scheduler]
-command=sh -c "while true; do php /var/www/html/artisan schedule:run >> /dev/null 2>&1; sleep 60; done"
-autostart=true
-autorestart=true
 ````
 
 ## File: public/.htaccess
@@ -5130,104 +5101,6 @@ $classes = ($active ?? false)
 </html>
 ````
 
-## File: resources/views/layouts/navigation.blade Kopie.php
-````php
-<nav x-data="{ open: false }" class="bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700">
-    <!-- Primary Navigation Menu -->
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex justify-between h-16">
-            <div class="flex">
-                <!-- Logo -->
-                <div class="shrink-0 flex items-center">
-                    <a href="{{ route('dashboard') }}">
-                        <x-application-logo class="block h-9 w-auto fill-current text-gray-800 dark:text-gray-200" />
-                    </a>
-                </div>
-
-                <!-- Navigation Links -->
-                <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
-                    <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
-                        {{ __('Dashboard') }}
-                    </x-nav-link>
-                </div>
-            </div>
-
-            <!-- Settings Dropdown -->
-            <div class="hidden sm:flex sm:items-center sm:ms-6">
-                <x-dropdown align="right" width="48">
-                    <x-slot name="trigger">
-                        <button class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-300 focus:outline-none transition ease-in-out duration-150">
-                            <div>{{ Auth::user()->name }}</div>
-
-                            <div class="ms-1">
-                                <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-                                    <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
-                                </svg>
-                            </div>
-                        </button>
-                    </x-slot>
-
-                    <x-slot name="content">
-
-                        <!-- Authentication -->
-                        <form method="POST" action="{{ route('logout') }}">
-                            @csrf
-
-                            <x-dropdown-link :href="route('logout')"
-                                    onclick="event.preventDefault();
-                                                this.closest('form').submit();">
-                                {{ __('Log Out') }}
-                            </x-dropdown-link>
-                        </form>
-                    </x-slot>
-                </x-dropdown>
-            </div>
-
-            <!-- Hamburger -->
-            <div class="-me-2 flex items-center sm:hidden">
-                <button @click="open = ! open" class="inline-flex items-center justify-center p-2 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-500 dark:hover:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-900 focus:outline-none focus:bg-gray-100 dark:focus:bg-gray-900 focus:text-gray-500 dark:focus:text-gray-400 transition duration-150 ease-in-out">
-                    <svg class="h-6 w-6" stroke="currentColor" fill="none" viewBox="0 0 24 24">
-                        <path :class="{'hidden': open, 'inline-flex': ! open }" class="inline-flex" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-                        <path :class="{'hidden': ! open, 'inline-flex': open }" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Responsive Navigation Menu -->
-    <div :class="{'block': open, 'hidden': ! open}" class="hidden sm:hidden">
-        <div class="pt-2 pb-3 space-y-1">
-            <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
-                {{ __('Dashboard') }}
-            </x-responsive-nav-link>
-        </div>
-
-        <!-- Responsive Settings Options -->
-        <div class="pt-4 pb-1 border-t border-gray-200 dark:border-gray-600">
-            <div class="px-4">
-                <div class="font-medium text-base text-gray-800 dark:text-gray-200">{{ Auth::user()->name }}</div>
-                <div class="font-medium text-sm text-gray-500">{{ Auth::user()->email }}</div>
-            </div>
-
-            <div class="mt-3 space-y-1">
-
-                <!-- Authentication -->
-                <form method="POST" action="{{ route('logout') }}">
-                    @csrf
-
-                    <x-responsive-nav-link :href="route('logout')"
-                            onclick="event.preventDefault();
-                                        this.closest('form').submit();">
-                        {{ __('Log Out') }}
-                    </x-responsive-nav-link>
-                </form>
-            </div>
-        </div>
-    </div>
-</nav>
-````
-
 ## File: resources/views/layouts/navigation.blade.php
 ````php
 <nav x-data="{ open: false }" class="bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700">
@@ -5562,7 +5435,7 @@ $classes = ($active ?? false)
 </x-app-layout>
 ````
 
-## File: resources/views/staff/index.blade.php
+## File: resources/views/staff/aindex.blade.php
 ````php
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
@@ -5976,6 +5849,579 @@ $classes = ($active ?? false)
                                         @endif
 
                                         @if (!$registration->needs_supervision && !$registration->needs_parent_consent)
+                                            <span class="text-gray-300">—</span>
+                                        @endif
+                                    </td>
+
+                                    <td class="px-4 py-4 align-top">
+                                        @if ($currentCheckin)
+                                            <span class="text-sm text-gray-500">
+                                                Eingecheckt {{ $currentCheckin->checked_in_at->format('H:i') }} Uhr
+                                            </span>
+                                        @elseif ($isTrialMaxReached)
+                                            <span class="text-xs font-semibold text-red-600">
+                                                🚫 Schnupperlimit ausgeschöpft (3/3)
+                                            </span>
+                                        @elseif ($needsKulanz)
+                                            <div class="flex flex-col gap-1.5">
+                                                <span class="text-xs font-semibold {{ $hintColor }}">
+                                                    {{ $hintIcon }} {{ $kulanzHint }}
+                                                </span>
+                                                <form method="POST" action="{{ route('staff.kulanz', $registration) }}"
+                                                    class="flex flex-col gap-1.5">
+                                                    @csrf
+                                                    <input type="text" name="reason"
+                                                        placeholder="Grund ..." required
+                                                        class="block w-full max-w-[180px] border border-gray-300 rounded-md px-2 py-1.5 text-xs bg-white text-gray-900 focus:border-amber-500 focus:ring-amber-500">
+                                                    <button type="submit"
+                                                        class="self-start text-xs font-semibold text-amber-700 underline bg-transparent border-none p-0 cursor-pointer hover:text-amber-900">
+                                                        Kulanz gewähren
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        @else
+                                            <form method="POST" action="{{ route('staff.checkin', $registration) }}">
+                                                @csrf
+                                                <button type="submit"
+                                                    class="inline-flex items-center justify-center border border-transparent bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-indigo-700 transition">
+                                                    Check-in
+                                                </button>
+                                            </form>
+                                        @endif
+                                    </td>
+
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="6"
+                                        class="px-4 py-8 text-center text-sm text-gray-500 border-t border-gray-100">
+                                        Keine Registrierungen gefunden.
+                                    </td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    {{-- QR-SCANNER JAVASCRIPT --}}
+    <script>
+    let html5QrCode = null;
+    let scannerRunning = false;
+    let lastScanned = null;
+    const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+    function toggleScanner() {
+        const panel = document.getElementById('qr-scanner-panel');
+        const isHidden = panel.classList.contains('hidden');
+        if (isHidden) {
+            panel.classList.remove('hidden');
+            panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            initCameraList();
+        } else {
+            stopScanner();
+            panel.classList.add('hidden');
+        }
+    }
+
+    async function initCameraList() {
+        try {
+            const cameras = await Html5Qrcode.getCameras();
+            const select = document.getElementById('camera-select');
+            select.innerHTML = '';
+            if (!cameras || cameras.length === 0) {
+                select.innerHTML = '<option value="">Keine Kamera gefunden</option>';
+                showStatus('Keine Kamera gefunden. Bitte Kamerazugriff erlauben.', 'error');
+                return;
+            }
+            cameras.forEach((cam, i) => {
+                const opt = document.createElement('option');
+                opt.value = cam.id;
+                opt.text = cam.label || `Kamera ${i + 1}`;
+                select.appendChild(opt);
+            });
+            const backCam = cameras.find(c => /back|rear|environment/i.test(c.label));
+            if (backCam) select.value = backCam.id;
+            startScanner();
+        } catch (err) {
+            showStatus('Kamerazugriff verweigert. Bitte in den Browser-Einstellungen erlauben.', 'error');
+        }
+    }
+
+    async function startScanner() {
+        const select = document.getElementById('camera-select');
+        const cameraId = select.value;
+        if (!cameraId) { showStatus('Bitte zuerst eine Kamera auswählen.', 'error'); return; }
+        if (scannerRunning) await stopScanner();
+        html5QrCode = new Html5Qrcode('qr-reader');
+        try {
+            await html5QrCode.start(
+                cameraId,
+                { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
+                onScanSuccess,
+                onScanError
+            );
+            scannerRunning = true;
+            showStatus('Scanner aktiv – QR-Code vor die Kamera halten.', 'info');
+        } catch (err) {
+            showStatus('Kamera konnte nicht gestartet werden: ' + err, 'error');
+        }
+    }
+
+    async function stopScanner() {
+        if (html5QrCode && scannerRunning) {
+            try { await html5QrCode.stop(); } catch (_) {}
+            scannerRunning = false;
+        }
+        clearStatus();
+    }
+
+    async function onScanSuccess(decodedText) {
+        console.log('RAW SCAN:', decodedText);
+        if (decodedText === lastScanned) return;
+        lastScanned = decodedText;
+        setTimeout(() => { lastScanned = null; }, 3000);
+        if (html5QrCode && scannerRunning) { try { html5QrCode.pause(); } catch (_) {} }
+        showStatus('QR-Code erkannt – wird geprüft …', 'info');
+        let token = decodedText.trim();
+        const urlMatch = token.match(/\/verify\/([^/?#]+)/);
+        if (urlMatch) token = urlMatch[1];
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        let response;
+        try {
+            response = await fetch(`/verify/${token}/checkin`, {
+                method: 'POST',
+                headers: { 'X-CSRF-TOKEN': csrfToken ?? '', 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            });
+        } catch (networkErr) {
+            showStatus('Verbindungsfehler – ist der Server erreichbar? (' + networkErr.message + ')', 'error');
+            setTimeout(() => { try { html5QrCode.resume(); } catch (_) {} }, 3000);
+            return;
+        }
+        if (response.status === 419) { showStatus('Sitzung abgelaufen – Seite wird neu geladen …', 'info'); setTimeout(() => window.location.reload(), 1500); return; }
+        if (response.status === 404) { showStatus('⚠ QR-Code nicht erkannt – ungültiger oder abgelaufener Code.', 'error'); setTimeout(() => { try { html5QrCode.resume(); } catch (_) {} }, 3000); return; }
+        let data = {};
+        try { data = await response.json(); } catch (_) { showStatus('Unerwartete Server-Antwort.', 'error'); return; }
+        if (response.ok && data.success) {
+            showStatus('✓ ' + data.message, 'success');
+            setTimeout(() => window.location.reload(), 1800);
+        } else {
+            showStatus('⚠ ' + (data.message ?? 'Unbekannter Fehler'), 'error');
+            setTimeout(() => { try { html5QrCode.resume(); } catch (_) {} }, 3000);
+        }
+    }
+
+    function onScanError() {}
+
+    function showStatus(msg, type) {
+        const el = document.getElementById('qr-status');
+        el.textContent = msg;
+        el.className = 'mt-3 rounded-lg px-4 py-3 text-sm font-medium';
+        const styles = { info: 'bg-blue-50 border border-blue-200 text-blue-800', success: 'bg-green-50 border border-green-200 text-green-800', error: 'bg-red-50 border border-red-200 text-red-800' };
+        el.classList.add(...(styles[type] ?? styles.info).split(' '));
+        el.classList.remove('hidden');
+    }
+
+    function clearStatus() {
+        const el = document.getElementById('qr-status');
+        el.classList.add('hidden');
+        el.textContent = '';
+    }
+    </script>
+
+</body>
+</html>
+````
+
+## File: resources/views/staff/bindex.blade.php
+````php
+<!DOCTYPE html>
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>Staff | Kletterhalle</title>
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+</head>
+<body class="font-sans antialiased bg-gray-50 text-gray-900">
+
+    @include('layouts.navigation')
+
+    <main class="py-8">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+
+            {{-- STATISTIK-KARTEN --}}
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+                    <div class="text-3xl font-bold text-teal-600">{{ $stats['checkedInToday'] }}</div>
+                    <div class="text-sm text-gray-500 mt-1">Heute eingecheckt</div>
+                </div>
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+                    <div class="text-3xl font-bold text-blue-500">{{ $stats['guestsToday'] }}</div>
+                    <div class="text-sm text-gray-500 mt-1">Davon Gäste</div>
+                </div>
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+                    <div class="text-3xl font-bold text-indigo-600">{{ $stats['membersToday'] }}</div>
+                    <div class="text-sm text-gray-500 mt-1">Davon Mitglieder</div>
+                </div>
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+                    <div class="text-3xl font-bold text-gray-700">{{ $stats['totalRegistrations'] }}</div>
+                    <div class="text-sm text-gray-500 mt-1">Registrierungen gesamt</div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-xl font-semibold text-gray-800">Staff-Ansicht</h2>
+                <button id="qr-toggle-btn" onclick="toggleScanner()"
+                    class="inline-flex items-center gap-2 bg-indigo-600 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-indigo-700 transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4h6v6H4V4zm0 10h6v6H4v-6zm10-10h6v6h-6V4zm4 10h2v2h-2v-2zm-4 0h2v2h-2v-2zm0 4h2v2h-2v-2zm4-2h2v2h-2v-2zm0 4h2v2h-2v-2z"/>
+                    </svg>
+                    QR-Code scannen
+                </button>
+            </div>
+
+            {{-- QR-SCANNER PANEL --}}
+            <div id="qr-scanner-panel" class="hidden mb-6 bg-white border border-indigo-200 rounded-xl shadow-sm overflow-hidden">
+                <div class="flex items-center justify-between px-4 py-3 bg-indigo-50 border-b border-indigo-100">
+                    <div class="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        </svg>
+                        <span class="text-sm font-semibold text-indigo-800">Kamera-Scanner</span>
+                    </div>
+                    <button onclick="toggleScanner()" class="text-indigo-400 hover:text-indigo-700 transition">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="p-4">
+                    <div class="mb-3 flex items-center gap-3">
+                        <label for="camera-select" class="text-xs text-gray-500 whitespace-nowrap">Kamera:</label>
+                        <select id="camera-select"
+                            class="flex-1 border border-gray-300 rounded-md px-2 py-1.5 text-sm bg-white text-gray-900 focus:border-indigo-500 focus:ring-indigo-500">
+                            <option value="">Wird geladen…</option>
+                        </select>
+                        <button onclick="startScanner()"
+                            class="inline-flex items-center bg-indigo-600 text-white rounded-md px-3 py-1.5 text-xs font-semibold hover:bg-indigo-700 transition">
+                            Starten
+                        </button>
+                        <button onclick="stopScanner()"
+                            class="inline-flex items-center bg-white border border-gray-300 text-gray-700 rounded-md px-3 py-1.5 text-xs font-semibold hover:bg-gray-50 transition">
+                            Stopp
+                        </button>
+                    </div>
+                    <div id="qr-reader"
+                        class="rounded-lg overflow-hidden border border-gray-200 bg-gray-900"
+                        style="width:100%; max-width:480px; min-height:240px; margin:0 auto;">
+                    </div>
+                    <div id="qr-status" class="mt-3 hidden rounded-lg px-4 py-3 text-sm font-medium"></div>
+                </div>
+            </div>
+
+            @if (session('success'))
+                <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800">
+                    {{ session('success') }}
+                </div>
+            @endif
+
+            @if (session('error'))
+                <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800">
+                    {{ session('error') }}
+                </div>
+            @endif
+
+            @if ($errors->any())
+                <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800">
+                    <ul class="list-disc pl-5 m-0">
+                        @foreach ($errors->all() as $error)
+                            <li class="my-1">{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+
+            {{-- Suche --}}
+            <div class="mb-6 bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                <form method="GET" action="{{ route('staff') }}"
+                    class="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3">
+                    <div class="flex-1 min-w-0 sm:min-w-[280px]">
+                        <input type="text" name="q" value="{{ $query }}"
+                            placeholder="Name oder Mitgliedsnummer suchen"
+                            class="block w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-900 focus:border-indigo-500 focus:ring-indigo-500">
+                    </div>
+                    <div class="flex gap-2 flex-col sm:flex-row">
+                        <button type="submit"
+                            class="inline-flex items-center justify-center bg-white border border-gray-300 rounded-lg px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">
+                            Suchen
+                        </button>
+                        <a href="{{ route('staff') }}"
+                            class="inline-flex items-center justify-center bg-white border border-gray-300 rounded-lg px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition no-underline">
+                            Zurücksetzen
+                        </a>
+                    </div>
+                </form>
+            </div>
+
+            {{-- ============================================================ --}}
+            {{-- Mobile Cards                                                  --}}
+            {{-- ============================================================ --}}
+            <div class="space-y-4 md:hidden">
+                @php $shownDividerMobile = false; @endphp
+
+                @forelse ($registrations as $registration)
+                    @php
+                        $currentCheckin  = $registration->currentCheckin;
+                        $hasActiveKulanz = $registration->manual_exception_until
+                                           && $registration->manual_exception_until->isFuture();
+                        $visits          = $registration->trial_visits_count ?? 0;
+
+                        $isTrialMaxReached   = $registration->member_type === 'guest' && $visits >= 3;
+                        $isTrialLimitReached = $registration->member_type === 'guest'
+                                               && $visits >= 1 && $visits < 3
+                                               && !$hasActiveKulanz;
+
+                        $needsKulanz = (in_array($registration->access_status, ['red', 'orange']) && !$hasActiveKulanz)
+                                       || $isTrialLimitReached;
+
+                        $kulanzHint = match (true) {
+                            $registration->access_status === 'red' => 'Person gesperrt',
+                            $isTrialLimitReached                   => 'Schnupperlimit erreicht (' . $visits . '/3)',
+                            default                                => 'Aktion erforderlich',
+                        };
+                        $hintIcon  = $registration->access_status === 'red' ? '🚫' : '⚠️';
+                        $hintColor = $registration->access_status === 'red' ? 'text-red-600' : 'text-amber-600';
+
+                        $accessStyle = match ($registration->access_status) {
+                            'green'  => 'bg-green-100 text-green-800',
+                            'blue'   => 'bg-blue-100 text-blue-800',
+                            'orange' => 'bg-amber-100 text-amber-800',
+                            default  => 'bg-red-100 text-red-800',
+                        };
+                        $accessText = match ($registration->access_status) {
+                            'green'  => 'Zutritt ok',
+                            'blue'   => 'Schnuppern',
+                            'orange' => $registration->manual_exception_reason ? 'Kulanz' : 'Warnung',
+                            default  => 'Gesperrt',
+                        };
+                    @endphp
+
+                    @if (!$shownDividerMobile && !$currentCheckin)
+                        @php $shownDividerMobile = true; @endphp
+                        <div class="px-2 pt-2 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                            Noch nicht eingecheckt
+                        </div>
+                    @endif
+
+                    <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm space-y-3
+                        {{ $currentCheckin ? 'border-l-2 border-l-indigo-300' : '' }}">
+
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <div class="text-sm font-semibold text-gray-900">
+                                    {{ $registration->first_name }} {{ $registration->last_name }}
+                                </div>
+                                <div class="text-xs text-gray-400 mt-0.5">
+                                    {{ $registration->birth_date?->format('d.m.Y') ?? '—' }}
+                                    · {{ $registration->member_type === 'guest' ? 'Gast' : 'Mitglied' }}
+                                    @if ($registration->member_number)
+                                        · {{ $registration->member_number }}
+                                    @endif
+                                </div>
+                            </div>
+                            <div class="flex flex-col items-end gap-1 shrink-0">
+                                <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-bold {{ $accessStyle }}">
+                                    {{ $accessText }}
+                                </span>
+                            </div>
+                        </div>
+
+                        {{-- Zusatzinfos: nur 14–17 bekommt das Formular; alle anderen → access_reason --}}
+                        @if ($registration->needs_parent_consent)
+                            <div class="text-xs text-gray-600 space-y-1 border-t border-gray-100 pt-2">
+                                <div>Klettert alleine? – dann Formular nötig
+                                    (<a href="https://www.oetk-langenlois.at/fileadmin/Einverstaendniserklaerung-14-18.pdf"
+                                        target="_blank" rel="noopener noreferrer"
+                                        class="underline text-gray-500">PDF</a>)
+                                    @if ($registration->parent_consent_received)
+                                        <span class="text-gray-400">(geprüft)</span>
+                                    @else
+                                        <form method="POST" action="{{ route('staff.parent-consent', $registration) }}" class="inline">
+                                            @csrf
+                                            <button type="submit" class="underline text-gray-600 bg-transparent border-none p-0 cursor-pointer text-xs">
+                                                Formular abgegeben
+                                            </button>
+                                        </form>
+                                    @endif
+                                </div>
+                            </div>
+                        @elseif ($registration->access_reason)
+                            <div class="text-xs text-gray-500 border-t border-gray-100 pt-2">
+                                {{ $registration->access_reason }}
+                            </div>
+                        @endif
+
+                        <div class="border-t border-gray-100 pt-3">
+                            @if ($currentCheckin)
+                                <span class="text-sm text-gray-500">
+                                    Eingecheckt {{ $currentCheckin->checked_in_at->format('H:i') }} Uhr
+                                </span>
+                            @elseif ($isTrialMaxReached)
+                                <span class="text-xs font-semibold text-red-600">
+                                    🚫 Schnupperlimit ausgeschöpft (3/3)
+                                </span>
+                            @elseif ($needsKulanz)
+                                <form method="POST" action="{{ route('staff.kulanz', $registration) }}"
+                                    class="flex flex-col gap-2">
+                                    @csrf
+                                    <span class="text-xs font-semibold {{ $hintColor }}">
+                                        {{ $hintIcon }} {{ $kulanzHint }}
+                                    </span>
+                                    <input type="text" name="reason" placeholder="Grund" required
+                                        class="block w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white text-gray-900 focus:border-amber-500 focus:ring-amber-500">
+                                    <button type="submit"
+                                        class="self-start text-xs font-semibold text-amber-700 underline bg-transparent border-none p-0 cursor-pointer hover:text-amber-900">
+                                        Kulanz gewähren
+                                    </button>
+                                </form>
+                            @else
+                                <form method="POST" action="{{ route('staff.checkin', $registration) }}">
+                                    @csrf
+                                    <button type="submit"
+                                        class="w-full inline-flex items-center justify-center border border-transparent bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-indigo-700 transition">
+                                        Check-in
+                                    </button>
+                                </form>
+                            @endif
+                        </div>
+                    </div>
+                @empty
+                    <div class="bg-white border border-gray-200 rounded-xl p-6 text-center text-sm text-gray-500 shadow-sm">
+                        Keine Registrierungen gefunden.
+                    </div>
+                @endforelse
+            </div>
+
+            {{-- ============================================================ --}}
+            {{-- Desktop Table                                                 --}}
+            {{-- ============================================================ --}}
+            <div class="hidden md:block bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                <div class="overflow-x-auto w-full">
+                    <table class="w-full text-left">
+                        <thead class="bg-gray-50 border-b border-gray-200">
+                            <tr>
+                                <th class="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Name</th>
+                                <th class="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Mitgliedsnr.</th>
+                                <th class="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Zutritt</th>
+                                <th class="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Zusatzinfos</th>
+                                <th class="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Check-in / Aktion</th>
+                            </tr>
+                        </thead>
+
+                        <tbody class="divide-y divide-gray-100">
+                            @php $shownDivider = false; @endphp
+
+                            @forelse ($registrations as $registration)
+                                @php
+                                    $currentCheckin  = $registration->currentCheckin;
+                                    $hasActiveKulanz = $registration->manual_exception_until
+                                                       && $registration->manual_exception_until->isFuture();
+                                    $visits          = $registration->trial_visits_count ?? 0;
+
+                                    $isTrialMaxReached   = $registration->member_type === 'guest' && $visits >= 3;
+                                    $isTrialLimitReached = $registration->member_type === 'guest'
+                                                           && $visits >= 1 && $visits < 3
+                                                           && !$hasActiveKulanz;
+
+                                    $needsKulanz = (in_array($registration->access_status, ['red', 'orange']) && !$hasActiveKulanz)
+                                                   || $isTrialLimitReached;
+
+                                    $kulanzHint = match (true) {
+                                        $registration->access_status === 'red' => 'Person gesperrt',
+                                        $isTrialLimitReached                   => 'Schnupperlimit erreicht (' . $visits . '/3)',
+                                        default                                => 'Aktion erforderlich',
+                                    };
+                                    $hintIcon  = $registration->access_status === 'red' ? '🚫' : '⚠️';
+                                    $hintColor = $registration->access_status === 'red' ? 'text-red-600' : 'text-amber-600';
+
+                                    $accessStyle = match ($registration->access_status) {
+                                        'green'  => 'bg-green-100 text-green-800',
+                                        'blue'   => 'bg-blue-100 text-blue-800',
+                                        'orange' => 'bg-amber-100 text-amber-800',
+                                        default  => 'bg-red-100 text-red-800',
+                                    };
+                                    $accessText = match ($registration->access_status) {
+                                        'green'  => 'Zutritt ok',
+                                        'blue'   => 'Schnuppergast',
+                                        'orange' => $registration->manual_exception_reason ? 'Kulanz' : 'Warnung',
+                                        default  => 'Gesperrt',
+                                    };
+                                @endphp
+
+                                @if (!$shownDivider && !$currentCheckin)
+                                    @php $shownDivider = true; @endphp
+                                    <tr>
+                                        <td colspan="6"
+                                            class="px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider bg-gray-50 border-t border-b border-gray-100">
+                                            Noch nicht eingecheckt
+                                        </td>
+                                    </tr>
+                                @endif
+
+                                <tr class="hover:bg-gray-50">
+
+                                    <td class="px-4 py-4 align-top">
+                                        <div class="text-sm font-semibold text-gray-900">
+                                            {{ $registration->first_name }} {{ $registration->last_name }}
+                                        </div>
+                                        <div class="text-xs text-gray-400 mt-0.5">
+                                            {{ $registration->birth_date?->format('d.m.Y') ?? '—' }}
+                                        </div>
+                                    </td>
+
+                                    <td class="px-4 py-4 align-top text-sm text-gray-600">
+                                        {{ $registration->member_number ?? '—' }}
+                                    </td>
+
+                                    <td class="px-4 py-4 align-top">
+                                        <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-bold {{ $accessStyle }}">
+                                            {{ $accessText }}
+                                        </span>
+                                    </td>
+
+                                    {{-- ZUSATZINFOS-SPALTE --}}
+                                    {{-- 14–17 (needs_parent_consent): bisherige Formulaanzeige beibehalten --}}
+                                    {{-- Alle anderen: access_reason anzeigen --}}
+                                    <td class="px-4 py-4 align-top text-sm text-gray-600">
+                                        @if ($registration->needs_parent_consent)
+                                            <div>Klettert alleine? – dann Formular nötig
+                                                (<a href="https://www.oetk-langenlois.at/fileadmin/Einverstaendniserklaerung-14-18.pdf"
+                                                    target="_blank" rel="noopener noreferrer"
+                                                    class="text-gray-500 underline">PDF</a>)
+                                            </div>
+                                            <div class="text-xs text-gray-400 mt-0.5">
+                                                @if ($registration->parent_consent_received)
+                                                    Formular geprüft
+                                                @else
+                                                    <form method="POST" action="{{ route('staff.parent-consent', $registration) }}">
+                                                        @csrf
+                                                        <button type="submit"
+                                                            class="text-xs text-gray-600 underline bg-transparent border-none p-0 cursor-pointer hover:text-gray-900">
+                                                            Formular abgegeben
+                                                        </button>
+                                                    </form>
+                                                @endif
+                                            </div>
+                                        @elseif ($registration->access_reason)
+                                            <span class="text-gray-600">{{ $registration->access_reason }}</span>
+                                        @else
                                             <span class="text-gray-300">—</span>
                                         @endif
                                     </td>
@@ -7423,75 +7869,6 @@ indent_size = 2
 indent_size = 4
 ````
 
-## File: .env.example
-````
-APP_NAME=Laravel
-APP_ENV=local
-APP_KEY=
-APP_DEBUG=true
-APP_URL=http://localhost
-
-APP_LOCALE=en
-APP_FALLBACK_LOCALE=en
-APP_FAKER_LOCALE=en_US
-
-APP_MAINTENANCE_DRIVER=file
-# APP_MAINTENANCE_STORE=database
-
-# PHP_CLI_SERVER_WORKERS=4
-
-BCRYPT_ROUNDS=12
-
-LOG_CHANNEL=stack
-LOG_STACK=single
-LOG_DEPRECATIONS_CHANNEL=null
-LOG_LEVEL=debug
-
-DB_CONNECTION=sqlite
-# DB_HOST=127.0.0.1
-# DB_PORT=3306
-# DB_DATABASE=laravel
-# DB_USERNAME=root
-# DB_PASSWORD=
-
-SESSION_DRIVER=database
-SESSION_LIFETIME=120
-SESSION_ENCRYPT=false
-SESSION_PATH=/
-SESSION_DOMAIN=null
-
-BROADCAST_CONNECTION=log
-FILESYSTEM_DISK=local
-QUEUE_CONNECTION=database
-
-CACHE_STORE=database
-# CACHE_PREFIX=
-
-MEMCACHED_HOST=127.0.0.1
-
-REDIS_CLIENT=phpredis
-REDIS_HOST=127.0.0.1
-REDIS_PASSWORD=null
-REDIS_PORT=6379
-
-MAIL_MAILER=log
-MAIL_SCHEME=null
-MAIL_HOST=127.0.0.1
-MAIL_PORT=2525
-MAIL_USERNAME=null
-MAIL_PASSWORD=null
-MAIL_FROM_ADDRESS="hello@example.com"
-MAIL_FROM_NAME="${APP_NAME}"
-
-AWS_ACCESS_KEY_ID=
-AWS_SECRET_ACCESS_KEY=
-AWS_DEFAULT_REGION=us-east-1
-AWS_BUCKET=
-AWS_USE_PATH_STYLE_ENDPOINT=false
-
-VITE_APP_NAME="${APP_NAME}"
-````
-
 ## File: .gitattributes
 ````
 * text=auto eol=lf
@@ -7652,33 +8029,152 @@ exit($status);
 }
 ````
 
-## File: docker-compose.yml
-````yaml
-# docker-compose.yml
+## File: Dockerfile.old
+````
+FROM php:8.4-fpm
 
+# System-Abhängigkeiten inkl. GD + cron
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    zip \
+    unzip \
+    cron \
+    libpng-dev \
+    libonig-dev \
+    libxml2-dev \
+    libfreetype6-dev \
+    libjpeg62-turbo-dev \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Cronjob für Laravel Scheduler
+RUN echo '* * * * * cd /var/www/html && php artisan schedule:run >> /proc/1/fd/1 2>> /proc/1/fd/2' > /etc/cron.d/laravel-scheduler \
+    && chmod 0644 /etc/cron.d/laravel-scheduler \
+    && crontab /etc/cron.d/laravel-scheduler
+
+# Composer
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+
+WORKDIR /var/www/html
+
+# Nur composer-Dateien zuerst (für Layer-Caching)
+COPY composer.json composer.lock ./
+
+# Abhängigkeiten installieren
+RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
+
+# Restliche Dateien kopieren
+COPY . .
+
+# Autoloader nach vollständigem Code neu generieren
+RUN composer dump-autoload --no-dev --optimize
+
+# Berechtigungen
+RUN chown -R www-data:www-data storage bootstrap/cache
+
+EXPOSE 9000
+
+# Startet cron und danach php-fpm im Vordergrund
+CMD ["sh", "-c", "cron && php-fpm -F"]
+````
+
+## File: kletterdom-deployment-anleitung.md
+````markdown
+# Kletterdom Check-in – Deployment Anleitung
+**Docker · Raspberry Pi 4 · HTTPS · Lokales Netzwerk**
+
+---
+
+## Voraussetzungen
+
+### Hardware & Betriebssystem
+- Raspberry Pi 4 (min. 4 GB RAM empfohlen)
+- MicroSD-Karte ≥ 32 GB (Class 10 / A2)
+- Netzteil 5V / 3A USB-C
+- LAN-Kabel (stabiler als WLAN)
+- Raspberry Pi OS Lite 64-bit **oder** Ubuntu Server 24.04 LTS (arm64)
+- SSH aktiviert (via Raspberry Pi Imager → Erweiterte Optionen)
+
+### Netzwerk
+- Feste lokale IP am Router reservieren (DHCP-Reservierung per MAC-Adresse)
+- MAC-Adresse abrufen: `ip link show eth0`
+- Ziel-IP Beispiel: `192.168.178.54`
+
+### Erforderliche Software am Pi
+Nur **Docker** und **Git** – PHP, Node.js und MySQL laufen alle im Container.
+
+---
+
+## Schritt 1: SSH & Grundeinrichtung
+
+```bash
+# Per SSH verbinden
+ssh pi@192.168.x.x
+
+# Docker installieren
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+
+# Neu einloggen damit Docker-Gruppe aktiv wird
+exit
+```
+
+Wieder per SSH einloggen, dann:
+
+```bash
+sudo apt update && sudo apt install -y git
+
+# Hostname setzen (für kletterdom.local im Netzwerk)
+sudo hostnamectl set-hostname kletterdom
+sudo apt install -y avahi-daemon
+sudo systemctl enable avahi-daemon
+```
+
+---
+
+## Schritt 2: Repository klonen
+
+```bash
+git clone <REPO-URL> kletter-checkin
+cd kletter-checkin
+```
+
+---
+
+## Schritt 3: Konfigurationsdateien
+
+### 3.1 docker-compose.yml
+
+```yaml
 services:
+
   app:
+    build: .
     image: kletter-checkin
     container_name: kletter-app
     restart: unless-stopped
-    volumes:
-      - .:/var/www/html
     depends_on:
-      - db
+      db:
+        condition: service_healthy    # wartet bis MySQL wirklich bereit ist
     networks:
       - kletternet
     environment:
       - TZ=Europe/Vienna
+    # KEIN volumes-Mount! vendor/ würde sonst überschrieben.
 
   nginx:
     image: nginx:alpine
     container_name: kletter-nginx
     restart: unless-stopped
     ports:
-      - "8080:80"
+      - "80:80"
+      - "443:443"
     volumes:
-      - .:/var/www/html
       - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./docker/ssl:/etc/nginx/ssl
     depends_on:
       - app
     networks:
@@ -7691,13 +8187,18 @@ services:
     environment:
       MYSQL_DATABASE: klettercheckin
       MYSQL_USER: checkinuser
-      MYSQL_PASSWORD: BeispielPasswort123!
-      MYSQL_ROOT_PASSWORD: BeispielPasswort123!
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
     volumes:
       - dbdata:/var/lib/mysql
     networks:
       - kletternet
-  
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   node:
     image: node:20-alpine
     working_dir: /var/www
@@ -7711,37 +8212,257 @@ volumes:
 networks:
   kletternet:
     driver: bridge
-````
+```
 
-## File: Dockerfile
-````dockerfile
+### 3.2 Dockerfile
+
+```dockerfile
 FROM php:8.4-fpm
 
-# System-Abhängigkeiten inkl. GD
 RUN apt-get update && apt-get install -y \
     git curl zip unzip \
     libpng-dev libonig-dev libxml2-dev \
     libfreetype6-dev libjpeg62-turbo-dev \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd
+    && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Composer
+# Composer VOR composer install (wichtig!)
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
 
-# Nur composer-Dateien zuerst (für Layer-Caching)
 COPY composer.json composer.lock ./
 RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
 
-# Restliche Dateien kopieren
 COPY . .
+RUN composer dump-autoload --no-dev --optimize
 
-# Berechtigungen
 RUN chown -R www-data:www-data storage bootstrap/cache
 
 EXPOSE 9000
 CMD ["php-fpm"]
+```
+
+### 3.3 Nginx-Konfiguration (`docker/nginx.conf`)
+
+```nginx
+server {
+    listen 80;
+    server_name _;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name _;
+
+    ssl_certificate     /etc/nginx/ssl/nginx.crt;
+    ssl_certificate_key /etc/nginx/ssl/nginx.key;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
+
+    root /var/www/html/public;
+    index index.php;
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location ~ \.php$ {
+        fastcgi_pass app:9000;
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+        include fastcgi_params;
+    }
+
+    location ~ /\.ht {
+        deny all;
+    }
+}
+```
+
+---
+
+## Schritt 4: SSL-Zertifikat erstellen
+
+```bash
+mkdir -p docker/ssl
+
+openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+  -keyout docker/ssl/nginx.key \
+  -out docker/ssl/nginx.crt \
+  -subj "/CN=192.168.x.x" \
+  -addext "subjectAltName=IP:192.168.x.x,DNS:kletterdom.local"
+```
+
+Die IP `192.168.x.x` durch die tatsächliche Pi-IP ersetzen. Das Zertifikat gilt 10 Jahre.
+
+---
+
+## Schritt 5: .env anlegen
+
+```bash
+cp .env.example .env
+nano .env
+```
+
+```env
+APP_NAME="Kletterdom Check-in"
+APP_ENV=production
+APP_DEBUG=false
+APP_URL=https://192.168.x.x
+
+DB_CONNECTION=mysql
+DB_HOST=db
+DB_PORT=3306
+DB_DATABASE=klettercheckin
+DB_USERNAME=checkinuser
+DB_PASSWORD=SicheresPasswort!
+DB_ROOT_PASSWORD=SicheresRootPw!
+
+APP_KEY=                            # wird in Schritt 7 generiert
+
+SESSION_DRIVER=database
+QUEUE_CONNECTION=database
+CACHE_STORE=database
+```
+
+---
+
+## Schritt 6: Frontend-Assets bauen
+
+```bash
+docker compose --profile build run --rm node sh -c "npm install && npm run build"
+```
+
+Beim ersten Mal dauert das 3–8 Minuten auf dem Pi.
+
+---
+
+## Schritt 7: Container starten & Laravel einrichten
+
+```bash
+# Container starten
+docker compose up -d --build
+
+# .env in Container kopieren + Berechtigungen setzen
+docker compose cp .env app:/var/www/html/.env
+docker compose exec app chown www-data:www-data /var/www/html/.env
+
+# App-Key generieren
+docker compose exec app php artisan key:generate
+
+# .env mit generiertem Key zurückholen
+docker compose cp app:/var/www/html/.env .env
+
+# Datenbank migrieren
+docker compose exec app php artisan migrate --force
+
+# Storage-Link
+docker compose exec app php artisan storage:link
+
+# Cache aktivieren
+docker compose exec app php artisan config:cache
+docker compose exec app php artisan route:cache
+docker compose exec app php artisan view:cache
+```
+
+---
+
+## Schritt 8: Admin-User anlegen
+
+```bash
+docker compose exec app php artisan tinker
+```
+
+```php
+$user = \App\Models\User::create([
+    'name'     => 'Admin',
+    'email'    => 'admin@kletterdom.at',
+    'password' => bcrypt('SicheresAdminPasswort!'),
+]);
+$user->is_admin = 1;
+$user->save();
+exit
+```
+
+`is_admin` muss separat gesetzt werden – es ist bewusst nicht in `$fillable` (Sicherheitsmaßnahme gegen Mass Assignment).
+
+---
+
+## Schritt 9: Autostart aktivieren
+
+```bash
+sudo systemctl enable docker
+```
+
+Durch `restart: unless-stopped` starten alle Container nach jedem Reboot automatisch.
+
+---
+
+## App aufrufen
+
+| URL | Beschreibung |
+|---|---|
+| `https://192.168.x.x` | Direkt per IP |
+| `https://kletterdom.local` | Per Hostname (alle Geräte im Netzwerk) |
+
+Beim ersten Aufruf zeigt der Browser eine Zertifikatswarnung (Self-Signed) – einmalig pro Gerät bestätigen.
+
+---
+
+## Update deployen
+
+```bash
+cd kletter-checkin
+
+git pull
+docker compose --profile build run --rm node sh -c "npm run build"
+docker compose up -d --build
+docker compose exec app php artisan migrate --force
+docker compose exec app php artisan config:cache
+docker compose exec app php artisan route:cache
+docker compose exec app php artisan view:cache
+
+echo "Update fertig!"
+```
+
+---
+
+## Häufige Befehle
+
+| Aktion | Befehl |
+|---|---|
+| Status prüfen | `docker compose ps` |
+| App neu starten | `docker compose restart app` |
+| Alles stoppen | `docker compose down` |
+| Alles starten | `docker compose up -d` |
+| Laravel-Logs | `docker compose exec app tail -f storage/logs/laravel.log` |
+| Alle Logs live | `docker compose logs -f` |
+| In DB einloggen | `docker compose exec db mysql -u checkinuser -p klettercheckin` |
+| Artisan ausführen | `docker compose exec app php artisan <befehl>` |
+
+---
+
+## Troubleshooting
+
+| Problem | Lösung |
+|---|---|
+| 500 Error | `docker compose exec app tail -50 storage/logs/laravel.log` |
+| `vendor/autoload.php` fehlt | `volumes: .:/var/www/html` beim app-Service entfernen, neu bauen |
+| `composer: not found` im Build | `COPY --from=composer:latest` muss **vor** `RUN composer install` stehen |
+| `.env` fehlt im Container | `docker compose cp .env app:/var/www/html/.env` |
+| `APP_KEY` fehlt | `echo "APP_KEY=" >> .env` dann `key:generate` |
+| Permission denied auf `.env` | `docker compose exec app chown www-data:www-data /var/www/html/.env` |
+| DB nicht erreichbar | `docker compose ps` – ist `kletter-db` healthy? |
+| Assets fehlen / CSS kaputt | Node-Build-Schritt wiederholen |
+| `is_admin` wird nicht gesetzt | `$user->is_admin = 1; $user->save();` statt über `create()` |
+| Pi sehr langsam beim ersten Build | Normal – Docker-Layer werden danach gecacht |
+
+---
+
+*Kletterdom Check-in System · Deployment Guide · Stand April 2026*
 ````
 
 ## File: package.json
@@ -7927,4 +8648,816 @@ export default defineConfig({
     ],
     // kein "base" eintrag hier
 });
+````
+
+## File: docker/supervisord.conf
+````ini
+[unix_http_server]
+file=/var/run/supervisor.sock
+chmod=0700
+
+[supervisord]
+nodaemon=true
+logfile=/dev/null
+logfile_maxbytes=0
+pidfile=/var/run/supervisord.pid
+
+[rpcinterface:supervisor]
+supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
+
+[supervisorctl]
+serverurl=unix:///var/run/supervisor.sock
+
+[program:php-fpm]
+command=php-fpm -F
+autostart=true
+autorestart=true
+priority=10
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+
+[program:scheduler]
+command=sh -c "while true; do php /var/www/html/artisan schedule:run; sleep 60; done"
+directory=/var/www/html
+autostart=true
+autorestart=true
+priority=20
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+````
+
+## File: resources/views/staff/index.blade.php
+````php
+<!DOCTYPE html>
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>Staff | Kletterhalle</title>
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+</head>
+<body class="font-sans antialiased bg-gray-50 text-gray-900">
+
+    @include('layouts.navigation')
+
+    <main class="py-8">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+
+            {{-- STATISTIK-KARTEN --}}
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+                    <div class="text-3xl font-bold text-teal-600">{{ $stats['checkedInToday'] }}</div>
+                    <div class="text-sm text-gray-500 mt-1">Heute eingecheckt</div>
+                </div>
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+                    <div class="text-3xl font-bold text-blue-500">{{ $stats['guestsToday'] }}</div>
+                    <div class="text-sm text-gray-500 mt-1">Davon Gäste</div>
+                </div>
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+                    <div class="text-3xl font-bold text-indigo-600">{{ $stats['membersToday'] }}</div>
+                    <div class="text-sm text-gray-500 mt-1">Davon Mitglieder</div>
+                </div>
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+                    <div class="text-3xl font-bold text-gray-700">{{ $stats['totalRegistrations'] }}</div>
+                    <div class="text-sm text-gray-500 mt-1">Registrierungen gesamt</div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-xl font-semibold text-gray-800">Staff-Ansicht</h2>
+                <button id="qr-toggle-btn" onclick="toggleScanner()"
+                    class="inline-flex items-center gap-2 bg-indigo-600 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-indigo-700 transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4h6v6H4V4zm0 10h6v6H4v-6zm10-10h6v6h-6V4zm4 10h2v2h-2v-2zm-4 0h2v2h-2v-2zm0 4h2v2h-2v-2zm4-2h2v2h-2v-2zm0 4h2v2h-2v-2z"/>
+                    </svg>
+                    QR-Code scannen
+                </button>
+            </div>
+
+            {{-- QR-SCANNER PANEL --}}
+            <div id="qr-scanner-panel" class="hidden mb-6 bg-white border border-indigo-200 rounded-xl shadow-sm overflow-hidden">
+                <div class="flex items-center justify-between px-4 py-3 bg-indigo-50 border-b border-indigo-100">
+                    <div class="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        </svg>
+                        <span class="text-sm font-semibold text-indigo-800">Kamera-Scanner</span>
+                    </div>
+                    <button onclick="toggleScanner()" class="text-indigo-400 hover:text-indigo-700 transition">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="p-4">
+                    <div class="mb-3 flex items-center gap-3">
+                        <label for="camera-select" class="text-xs text-gray-500 whitespace-nowrap">Kamera:</label>
+                        <select id="camera-select"
+                            class="flex-1 border border-gray-300 rounded-md px-2 py-1.5 text-sm bg-white text-gray-900 focus:border-indigo-500 focus:ring-indigo-500">
+                            <option value="">Wird geladen…</option>
+                        </select>
+                        <button onclick="startScanner()"
+                            class="inline-flex items-center bg-indigo-600 text-white rounded-md px-3 py-1.5 text-xs font-semibold hover:bg-indigo-700 transition">
+                            Starten
+                        </button>
+                        <button onclick="stopScanner()"
+                            class="inline-flex items-center bg-white border border-gray-300 text-gray-700 rounded-md px-3 py-1.5 text-xs font-semibold hover:bg-gray-50 transition">
+                            Stopp
+                        </button>
+                    </div>
+                    <div id="qr-reader"
+                        class="rounded-lg overflow-hidden border border-gray-200 bg-gray-900"
+                        style="width:100%; max-width:480px; min-height:240px; margin:0 auto;">
+                    </div>
+                    <div id="qr-status" class="mt-3 hidden rounded-lg px-4 py-3 text-sm font-medium"></div>
+                </div>
+            </div>
+
+            @if (session('success'))
+                <div class="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800">
+                    {{ session('success') }}
+                </div>
+            @endif
+
+            @if (session('error'))
+                <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800">
+                    {{ session('error') }}
+                </div>
+            @endif
+
+            @if ($errors->any())
+                <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800">
+                    <ul class="list-disc pl-5 m-0">
+                        @foreach ($errors->all() as $error)
+                            <li class="my-1">{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+
+            {{-- Suche --}}
+            <div class="mb-6 bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                <form method="GET" action="{{ route('staff') }}"
+                    class="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3">
+                    <div class="flex-1 min-w-0 sm:min-w-[280px]">
+                        <input type="text" name="q" value="{{ $query }}"
+                            placeholder="Name oder Mitgliedsnummer suchen"
+                            class="block w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-900 focus:border-indigo-500 focus:ring-indigo-500">
+                    </div>
+                    <div class="flex gap-2 flex-col sm:flex-row">
+                        <button type="submit"
+                            class="inline-flex items-center justify-center bg-white border border-gray-300 rounded-lg px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">
+                            Suchen
+                        </button>
+                        <a href="{{ route('staff') }}"
+                            class="inline-flex items-center justify-center bg-white border border-gray-300 rounded-lg px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition no-underline">
+                            Zurücksetzen
+                        </a>
+                    </div>
+                </form>
+            </div>
+
+            {{-- ============================================================ --}}
+            {{-- Mobile Cards                                                  --}}
+            {{-- ============================================================ --}}
+            <div class="space-y-4 md:hidden">
+                @php $shownDividerMobile = false; @endphp
+
+                @forelse ($registrations as $registration)
+                    @php
+                        $currentCheckin  = $registration->currentCheckin;
+                        $hasActiveKulanz = $registration->manual_exception_until
+                                           && $registration->manual_exception_until->isFuture();
+                        $visits          = $registration->trial_visits_count ?? 0;
+
+                        $isTrialMaxReached   = $registration->member_type === 'guest' && $visits >= 3;
+                        $isTrialLimitReached = $registration->member_type === 'guest'
+                                               && $visits >= 1 && $visits < 3
+                                               && !$hasActiveKulanz;
+
+                        $needsKulanz = (in_array($registration->access_status, ['red', 'orange']) && !$hasActiveKulanz)
+                                       || $isTrialLimitReached;
+
+                        // Check-in ist definitiv gesperrt – kein Button, kein Kulanz-Formular möglich
+                        $isHardBlocked = $isTrialMaxReached
+                                         || ($registration->access_status === 'red' && !$hasActiveKulanz);
+
+                        $kulanzHint = match (true) {
+                            $registration->access_status === 'red' => 'Person gesperrt',
+                            $isTrialLimitReached                   => 'Schnupperlimit erreicht (' . $visits . ')',
+                            default                                => 'Aktion erforderlich',
+                        };
+                        $hintIcon  = $registration->access_status === 'red' ? '🚫' : '⚠️';
+                        $hintColor = $registration->access_status === 'red' ? 'text-red-600' : 'text-amber-600';
+
+                        $accessStyle = match ($registration->access_status) {
+                            'green'  => 'bg-green-100 text-green-800',
+                            'blue'   => 'bg-blue-100 text-blue-800',
+                            'orange' => 'bg-amber-100 text-amber-800',
+                            default  => 'bg-red-100 text-red-800',
+                        };
+                        $accessText = match ($registration->access_status) {
+                            'green'  => 'Zutritt ok',
+                            'blue'   => 'Schnuppern',
+                            'orange' => $registration->manual_exception_reason ? 'Kulanz' : 'Warnung',
+                            default  => 'Gesperrt',
+                        };
+                    @endphp
+
+                    @if (!$shownDividerMobile && !$currentCheckin)
+                        @php $shownDividerMobile = true; @endphp
+                        <div class="px-2 pt-2 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                            Noch nicht eingecheckt
+                        </div>
+                    @endif
+
+                    <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm space-y-3
+                        {{ $currentCheckin ? 'border-l-2 border-l-indigo-300' : '' }}">
+
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <div class="text-sm font-semibold text-gray-900">
+                                    {{ $registration->first_name }} {{ $registration->last_name }}
+                                </div>
+                                <div class="text-xs text-gray-400 mt-0.5">
+                                    {{ $registration->birth_date?->format('d.m.Y') ?? '—' }}
+                                    · {{ $registration->member_type === 'guest' ? 'Gast' : 'Mitglied' }}
+                                    @if ($registration->member_number)
+                                        · {{ $registration->member_number }}
+                                    @endif
+                                </div>
+                            </div>
+                            <div class="flex flex-col items-end gap-1 shrink-0">
+                                <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-bold {{ $accessStyle }}">
+                                    {{ $accessText }}
+                                </span>
+                            </div>
+                        </div>
+
+                        {{-- Zusatzinfos: 14–17 → Formular; alle anderen → access_reason --}}
+                        @if ($registration->needs_parent_consent)
+                            <div class="text-xs text-gray-600 space-y-1 border-t border-gray-100 pt-2">
+                                <div>Klettert alleine? – dann Formular nötig
+                                    (<a href="https://www.oetk-langenlois.at/fileadmin/Einverstaendniserklaerung-14-18.pdf"
+                                        target="_blank" rel="noopener noreferrer"
+                                        class="underline text-gray-500">PDF</a>)
+                                    @if ($registration->parent_consent_received)
+                                        <span class="text-gray-400">(geprüft)</span>
+                                    @else
+                                        <form method="POST" action="{{ route('staff.parent-consent', $registration) }}" class="inline">
+                                            @csrf
+                                            <button type="submit" class="underline text-gray-600 bg-transparent border-none p-0 cursor-pointer text-xs">
+                                                Formular abgegeben
+                                            </button>
+                                        </form>
+                                    @endif
+                                </div>
+                            </div>
+                        @elseif ($registration->access_reason)
+                            <div class="text-xs text-gray-500 border-t border-gray-100 pt-2">
+                                {{ $registration->access_reason }}
+                            </div>
+                        @endif
+
+                        <div class="border-t border-gray-100 pt-3">
+                            @if ($currentCheckin)
+                                <span class="text-sm text-gray-500">
+                                    Eingecheckt {{ $currentCheckin->checked_in_at->format('H:i') }} Uhr
+                                </span>
+                            @elseif ($isHardBlocked)
+                                {{-- Definitiv gesperrt: kein Button, nur Hinweis --}}
+                                <span class="text-xs font-semibold text-red-600">
+                                    🚫 {{ $isTrialMaxReached ? 'Schnupperlimit ausgeschöpft (3/3)' : 'Kein Zutritt möglich' }}
+                                </span>
+                            @elseif ($needsKulanz)
+                                <form method="POST" action="{{ route('staff.kulanz', $registration) }}"
+                                    class="flex flex-col gap-2">
+                                    @csrf
+                                    <span class="text-xs font-semibold {{ $hintColor }}">
+                                        {{ $hintIcon }} {{ $kulanzHint }}
+                                    </span>
+                                    <input type="text" name="reason" placeholder="Grund" required
+                                        class="block w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white text-gray-900 focus:border-amber-500 focus:ring-amber-500">
+                                    <button type="submit"
+                                        class="self-start text-xs font-semibold text-amber-700 underline bg-transparent border-none p-0 cursor-pointer hover:text-amber-900">
+                                        Kulanz gewähren
+                                    </button>
+                                </form>
+                            @else
+                                <form method="POST" action="{{ route('staff.checkin', $registration) }}">
+                                    @csrf
+                                    <button type="submit"
+                                        class="w-full inline-flex items-center justify-center border border-transparent bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-indigo-700 transition">
+                                        Check-in
+                                    </button>
+                                </form>
+                            @endif
+                        </div>
+                    </div>
+                @empty
+                    <div class="bg-white border border-gray-200 rounded-xl p-6 text-center text-sm text-gray-500 shadow-sm">
+                        Keine Registrierungen gefunden.
+                    </div>
+                @endforelse
+            </div>
+
+            {{-- ============================================================ --}}
+            {{-- Desktop Table                                                 --}}
+            {{-- ============================================================ --}}
+            <div class="hidden md:block bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                <div class="overflow-x-auto w-full">
+                    <table class="w-full text-left">
+                        <thead class="bg-gray-50 border-b border-gray-200">
+                            <tr>
+                                <th class="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Name</th>
+                                <th class="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Mitgliedsnr.</th>
+                                <th class="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Zutritt</th>
+                                <th class="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Zusatzinfos</th>
+                                <th class="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Check-in / Aktion</th>
+                            </tr>
+                        </thead>
+
+                        <tbody class="divide-y divide-gray-100">
+                            @php $shownDivider = false; @endphp
+
+                            @forelse ($registrations as $registration)
+                                @php
+                                    $currentCheckin  = $registration->currentCheckin;
+                                    $hasActiveKulanz = $registration->manual_exception_until
+                                                       && $registration->manual_exception_until->isFuture();
+                                    $visits          = $registration->trial_visits_count ?? 0;
+
+                                    $isTrialMaxReached   = $registration->member_type === 'guest' && $visits >= 3;
+                                    $isTrialLimitReached = $registration->member_type === 'guest'
+                                                           && $visits >= 1 && $visits < 3
+                                                           && !$hasActiveKulanz;
+
+                                    $needsKulanz = (in_array($registration->access_status, ['red', 'orange']) && !$hasActiveKulanz)
+                                                   || $isTrialLimitReached;
+
+                                    // Check-in ist definitiv gesperrt – kein Button, kein Kulanz-Formular möglich
+                                    $isHardBlocked = $isTrialMaxReached
+                                                     || ($registration->access_status === 'red' && !$hasActiveKulanz);
+
+                                    $kulanzHint = match (true) {
+                                        $registration->access_status === 'red' => 'Person gesperrt',
+                                        $isTrialLimitReached                   => 'Schnupperlimit erreicht (' . $visits . '/3)',
+                                        default                                => 'Aktion erforderlich',
+                                    };
+                                    $hintIcon  = $registration->access_status === 'red' ? '🚫' : '⚠️';
+                                    $hintColor = $registration->access_status === 'red' ? 'text-red-600' : 'text-amber-600';
+
+                                    $accessStyle = match ($registration->access_status) {
+                                        'green'  => 'bg-green-100 text-green-800',
+                                        'blue'   => 'bg-blue-100 text-blue-800',
+                                        'orange' => 'bg-amber-100 text-amber-800',
+                                        default  => 'bg-red-100 text-red-800',
+                                    };
+                                    $accessText = match ($registration->access_status) {
+                                        'green'  => 'Zutritt ok',
+                                        'blue'   => 'Schnuppergast',
+                                        'orange' => $registration->manual_exception_reason ? 'Kulanz' : 'Warnung',
+                                        default  => 'Gesperrt',
+                                    };
+                                @endphp
+
+                                @if (!$shownDivider && !$currentCheckin)
+                                    @php $shownDivider = true; @endphp
+                                    <tr>
+                                        <td colspan="5"
+                                            class="px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider bg-gray-50 border-t border-b border-gray-100">
+                                            Noch nicht eingecheckt
+                                        </td>
+                                    </tr>
+                                @endif
+
+                                <tr class="hover:bg-gray-50">
+
+                                    <td class="px-4 py-4 align-top">
+                                        <div class="text-sm font-semibold text-gray-900">
+                                            {{ $registration->first_name }} {{ $registration->last_name }}
+                                        </div>
+                                        <div class="text-xs text-gray-400 mt-0.5">
+                                            {{ $registration->birth_date?->format('d.m.Y') ?? '—' }}
+                                            · {{ $registration->member_type === 'guest' ? 'Gast' : 'Mitglied' }}
+                                        </div>
+                                    </td>
+
+                                    <td class="px-4 py-4 align-top text-sm text-gray-600">
+                                        {{ $registration->member_number ?? '—' }}
+                                    </td>
+
+                                    <td class="px-4 py-4 align-top">
+                                        <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-bold {{ $accessStyle }}">
+                                            {{ $accessText }}
+                                        </span>
+                                    </td>
+
+                                    {{-- ZUSATZINFOS-SPALTE --}}
+                                    <td class="px-4 py-4 align-top text-sm text-gray-600">
+                                        @if ($registration->needs_parent_consent)
+                                            <div>Klettert alleine? – dann Formular nötig
+                                                (<a href="https://www.oetk-langenlois.at/fileadmin/Einverstaendniserklaerung-14-18.pdf"
+                                                    target="_blank" rel="noopener noreferrer"
+                                                    class="text-gray-500 underline">PDF</a>)
+                                            </div>
+                                            <div class="text-xs text-gray-400 mt-0.5">
+                                                @if ($registration->parent_consent_received)
+                                                    Formular geprüft
+                                                @else
+                                                    <form method="POST" action="{{ route('staff.parent-consent', $registration) }}">
+                                                        @csrf
+                                                        <button type="submit"
+                                                            class="text-xs text-gray-600 underline bg-transparent border-none p-0 cursor-pointer hover:text-gray-900">
+                                                            Formular abgegeben
+                                                        </button>
+                                                    </form>
+                                                @endif
+                                            </div>
+                                        @elseif ($registration->access_reason)
+                                            <span class="text-gray-600">{{ $registration->access_reason }}</span>
+                                        @else
+                                            <span class="text-gray-300">—</span>
+                                        @endif
+                                    </td>
+
+                                    {{-- CHECK-IN / AKTION --}}
+                                    <td class="px-4 py-4 align-top">
+                                        @if ($currentCheckin)
+                                            <span class="text-sm text-gray-500">
+                                                Eingecheckt {{ $currentCheckin->checked_in_at->format('H:i') }} Uhr
+                                            </span>
+                                        @elseif ($isHardBlocked)
+                                            {{-- Definitiv gesperrt: kein Button, nur Hinweis --}}
+                                            <span class="text-xs font-semibold text-red-600">
+                                                🚫 {{ $isTrialMaxReached ? 'Schnupperlimit ausgeschöpft (3/3)' : 'Kein Zutritt möglich' }}
+                                            </span>
+                                        @elseif ($needsKulanz)
+                                            <div class="flex flex-col gap-1.5">
+                                                <span class="text-xs font-semibold {{ $hintColor }}">
+                                                    {{ $hintIcon }} {{ $kulanzHint }}
+                                                </span>
+                                                <form method="POST" action="{{ route('staff.kulanz', $registration) }}"
+                                                    class="flex flex-col gap-1.5">
+                                                    @csrf
+                                                    <input type="text" name="reason"
+                                                        placeholder="Grund ..." required
+                                                        class="block w-full max-w-[180px] border border-gray-300 rounded-md px-2 py-1.5 text-xs bg-white text-gray-900 focus:border-amber-500 focus:ring-amber-500">
+                                                    <button type="submit"
+                                                        class="self-start text-xs font-semibold text-amber-700 underline bg-transparent border-none p-0 cursor-pointer hover:text-amber-900">
+                                                        Kulanz gewähren
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        @else
+                                            <form method="POST" action="{{ route('staff.checkin', $registration) }}">
+                                                @csrf
+                                                <button type="submit"
+                                                    class="inline-flex items-center justify-center border border-transparent bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-indigo-700 transition">
+                                                    Check-in
+                                                </button>
+                                            </form>
+                                        @endif
+                                    </td>
+
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="5"
+                                        class="px-4 py-8 text-center text-sm text-gray-500 border-t border-gray-100">
+                                        Keine Registrierungen gefunden.
+                                    </td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    {{-- QR-SCANNER JAVASCRIPT --}}
+    <script>
+    let html5QrCode = null;
+    let scannerRunning = false;
+    let lastScanned = null;
+    const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+    function toggleScanner() {
+        const panel = document.getElementById('qr-scanner-panel');
+        const isHidden = panel.classList.contains('hidden');
+        if (isHidden) {
+            panel.classList.remove('hidden');
+            panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            initCameraList();
+        } else {
+            stopScanner();
+            panel.classList.add('hidden');
+        }
+    }
+
+    async function initCameraList() {
+        try {
+            const cameras = await Html5Qrcode.getCameras();
+            const select = document.getElementById('camera-select');
+            select.innerHTML = '';
+            if (!cameras || cameras.length === 0) {
+                select.innerHTML = '<option value="">Keine Kamera gefunden</option>';
+                showStatus('Keine Kamera gefunden. Bitte Kamerazugriff erlauben.', 'error');
+                return;
+            }
+            cameras.forEach((cam, i) => {
+                const opt = document.createElement('option');
+                opt.value = cam.id;
+                opt.text = cam.label || `Kamera ${i + 1}`;
+                select.appendChild(opt);
+            });
+            const backCam = cameras.find(c => /back|rear|environment/i.test(c.label));
+            if (backCam) select.value = backCam.id;
+            startScanner();
+        } catch (err) {
+            showStatus('Kamerazugriff verweigert. Bitte in den Browser-Einstellungen erlauben.', 'error');
+        }
+    }
+
+    async function startScanner() {
+        const select = document.getElementById('camera-select');
+        const cameraId = select.value;
+        if (!cameraId) { showStatus('Bitte zuerst eine Kamera auswählen.', 'error'); return; }
+        if (scannerRunning) await stopScanner();
+        html5QrCode = new Html5Qrcode('qr-reader');
+        try {
+            await html5QrCode.start(
+                cameraId,
+                { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
+                onScanSuccess,
+                onScanError
+            );
+            scannerRunning = true;
+            showStatus('Scanner aktiv – QR-Code vor die Kamera halten.', 'info');
+        } catch (err) {
+            showStatus('Kamera konnte nicht gestartet werden: ' + err, 'error');
+        }
+    }
+
+    async function stopScanner() {
+        if (html5QrCode && scannerRunning) {
+            try { await html5QrCode.stop(); } catch (_) {}
+            scannerRunning = false;
+        }
+        clearStatus();
+    }
+
+    async function onScanSuccess(decodedText) {
+        console.log('RAW SCAN:', decodedText);
+        if (decodedText === lastScanned) return;
+        lastScanned = decodedText;
+        setTimeout(() => { lastScanned = null; }, 3000);
+        if (html5QrCode && scannerRunning) { try { html5QrCode.pause(); } catch (_) {} }
+        showStatus('QR-Code erkannt – wird geprüft …', 'info');
+        let token = decodedText.trim();
+        const urlMatch = token.match(/\/verify\/([^/?#]+)/);
+        if (urlMatch) token = urlMatch[1];
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        let response;
+        try {
+            response = await fetch(`/verify/${token}/checkin`, {
+                method: 'POST',
+                headers: { 'X-CSRF-TOKEN': csrfToken ?? '', 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            });
+        } catch (networkErr) {
+            showStatus('Verbindungsfehler – ist der Server erreichbar? (' + networkErr.message + ')', 'error');
+            setTimeout(() => { try { html5QrCode.resume(); } catch (_) {} }, 3000);
+            return;
+        }
+        if (response.status === 419) { showStatus('Sitzung abgelaufen – Seite wird neu geladen …', 'info'); setTimeout(() => window.location.reload(), 1500); return; }
+        if (response.status === 404) { showStatus('⚠ QR-Code nicht erkannt – ungültiger oder abgelaufener Code.', 'error'); setTimeout(() => { try { html5QrCode.resume(); } catch (_) {} }, 3000); return; }
+        let data = {};
+        try { data = await response.json(); } catch (_) { showStatus('Unerwartete Server-Antwort.', 'error'); return; }
+        if (response.ok && data.success) {
+            showStatus('✓ ' + data.message, 'success');
+            setTimeout(() => window.location.reload(), 1800);
+        } else {
+            showStatus('⚠ ' + (data.message ?? 'Unbekannter Fehler'), 'error');
+            setTimeout(() => { try { html5QrCode.resume(); } catch (_) {} }, 3000);
+        }
+    }
+
+    function onScanError() {}
+
+    function showStatus(msg, type) {
+        const el = document.getElementById('qr-status');
+        el.textContent = msg;
+        el.className = 'mt-3 rounded-lg px-4 py-3 text-sm font-medium';
+        const styles = { info: 'bg-blue-50 border border-blue-200 text-blue-800', success: 'bg-green-50 border border-green-200 text-green-800', error: 'bg-red-50 border border-red-200 text-red-800' };
+        el.classList.add(...(styles[type] ?? styles.info).split(' '));
+        el.classList.remove('hidden');
+    }
+
+    function clearStatus() {
+        const el = document.getElementById('qr-status');
+        el.classList.add('hidden');
+        el.textContent = '';
+    }
+    </script>
+
+</body>
+</html>
+````
+
+## File: .env.example
+````
+# -----------------------------------------------
+# App
+# -----------------------------------------------
+APP_NAME="Kletterdom Check-in"
+APP_ENV=production
+APP_KEY=
+APP_DEBUG=false
+APP_URL=http://192.168.x.x        # lokale IP des Raspberry Pi eintragen
+
+APP_LOCALE=de
+APP_FALLBACK_LOCALE=de
+APP_FAKER_LOCALE=de_AT
+APP_TIMEZONE=Europe/Vienna
+
+APP_MAINTENANCE_DRIVER=file
+
+BCRYPT_ROUNDS=12
+
+# -----------------------------------------------
+# Logging
+# -----------------------------------------------
+LOG_CHANNEL=stack
+LOG_STACK=daily
+LOG_LEVEL=warning                  # in Produktion nicht debug!
+
+# -----------------------------------------------
+# Datenbank (MySQL via Docker)
+# -----------------------------------------------
+DB_CONNECTION=mysql
+DB_HOST=db                         # Docker-Servicename – nicht ändern!
+DB_PORT=3306
+DB_DATABASE=klettercheckin
+DB_USERNAME=checkinuser
+DB_PASSWORD=                       # sicheres Passwort eintragen – muss mit docker-compose.yml übereinstimmen!
+
+# -----------------------------------------------
+# Session / Cache / Queue
+# -----------------------------------------------
+SESSION_DRIVER=database
+SESSION_LIFETIME=120
+SESSION_ENCRYPT=false
+SESSION_PATH=/
+SESSION_DOMAIN=null
+
+BROADCAST_CONNECTION=log
+FILESYSTEM_DISK=local
+QUEUE_CONNECTION=database
+CACHE_STORE=database
+
+# -----------------------------------------------
+# Vite
+# -----------------------------------------------
+VITE_APP_NAME="${APP_NAME}"
+````
+
+## File: docker-compose.yml
+````yaml
+services:
+
+  app:
+    build: .                          # Image lokal bauen
+    image: kletter-checkin
+    container_name: kletter-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy    # Warten bis MySQL wirklich bereit ist
+    networks:
+      - kletternet
+    environment:
+      - TZ=Europe/Vienna
+    # Kein Volume-Mount! vendor/ würde sonst überschrieben werden.
+
+  nginx:
+    image: nginx:alpine
+    container_name: kletter-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./public:/var/www/html/public   # ← NEU: public-Ordner vom Host
+    depends_on:
+      - app
+    networks:
+      - kletternet
+
+  db:
+    image: mysql:8.0
+    container_name: kletter-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: klettercheckin
+      MYSQL_USER: checkinuser
+      MYSQL_PASSWORD: ${DB_PASSWORD}       # aus .env – nicht hardcoded!
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+    volumes:
+      - dbdata:/var/lib/mysql
+    networks:
+      - kletternet
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  node:
+    image: node:20-alpine
+    working_dir: /var/www
+    volumes:
+      - .:/var/www
+    profiles: ["build"]
+
+volumes:
+  dbdata:
+
+networks:
+  kletternet:
+    driver: bridge
+````
+
+## File: Dockerfile
+````dockerfile
+FROM php:8.4-fpm
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    supervisor \
+    git \
+    curl \
+    zip \
+    unzip \
+    libpng-dev \
+    libonig-dev \
+    libxml2-dev \
+    libzip-dev \
+    libfreetype6-dev \
+    libjpeg62-turbo-dev \
+    libicu-dev \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j$(nproc) \
+        pdo_mysql \
+        mysqli \
+        mbstring \
+        exif \
+        pcntl \
+        bcmath \
+        gd \
+        zip \
+        intl \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /var/log/supervisor /var/run/supervisor
+
+# Copy supervisor config
+COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Composer
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+
+WORKDIR /var/www/html
+
+# Composer install
+COPY composer.json composer.lock ./
+RUN composer install \
+    --no-dev \
+    --no-scripts \
+    --no-interaction \
+    --optimize-autoloader
+
+# Copy application
+COPY . .
+
+# Dump optimized autoload
+RUN git config --global --add safe.directory /var/www/html && \
+    composer dump-autoload --no-dev --optimize
+
+# Set permissions
+RUN chown -R www-data:www-data \
+    /var/www/html/storage \
+    /var/www/html/bootstrap/cache
+
+EXPOSE 9000
+
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
 ````
