@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Log;
 class ImportMembers extends Command
 {
     protected $signature = 'members:import {csvfile}';
-    protected $description = 'Importiert Mitglieder aus CSV (member_number,first_name,last_name,email,membership_status,payment_status,birth_date)';
+    protected $description = 'Importiert Mitglieder aus CSV (Semikolon-getrennt, österreichisches Format)';
 
     public function handle()
     {
@@ -27,7 +27,14 @@ class ImportMembers extends Command
             return self::FAILURE;
         }
 
-        $header = fgetcsv($handle);
+        // BOM entfernen
+        $bom = fread($handle, 3);
+        if ($bom !== "\xEF\xBB\xBF") {
+            rewind($handle);
+        }
+
+        // Semikolon als Trennzeichen
+        $header = fgetcsv($handle, 0, ';');
 
         if (!$header) {
             $this->error('CSV-Datei ist leer.');
@@ -35,50 +42,75 @@ class ImportMembers extends Command
             return self::FAILURE;
         }
 
-        $expectedHeader = [
-            'member_number',
-            'first_name',
-            'last_name',
-            'email',
-            'membership_status',
-            'payment_status',
-            'birth_date',
-        ];
+        // BOM aus erstem Header-Wert entfernen
+        $header[0] = preg_replace('/^\xEF\xBB\xBF/', '', $header[0]);
+        $header = array_map('trim', $header);
 
-        if ($header !== $expectedHeader) {
-            $this->error('Ungültiger CSV-Header.');
-            $this->line('Erwartet: ' . implode(',', $expectedHeader));
-            $this->line('Gefunden: ' . implode(',', $header));
+        // Pflicht-Spalten prüfen
+        $required = ['Mitgliedsnummer', 'Vorname', 'Nachname', 'Email', 'Status', 'Betrag offen', 'Geburtsdatum'];
+        $missing = array_diff($required, $header);
+
+        if (!empty($missing)) {
+            $this->error('Fehlende Spalten: ' . implode(', ', $missing));
+            $this->line('Gefundene Spalten: ' . implode(', ', $header));
             fclose($handle);
             return self::FAILURE;
         }
 
-        $imported = 0;
-        $skipped = 0;
+        // Spalten-Indizes dynamisch ermitteln
+        $col = array_flip($header);
 
-        while (($row = fgetcsv($handle)) !== false) {
-            if (count($row) < 7 || empty(trim($row[0]))) {
+        $imported = 0;
+        $skipped  = 0;
+
+        while (($row = fgetcsv($handle, 0, ';')) !== false) {
+            if (count($row) < count($header)) {
                 $skipped++;
                 continue;
             }
 
+            $memberNumber = trim($row[$col['Mitgliedsnummer']] ?? '');
+            if (empty($memberNumber)) {
+                $skipped++;
+                continue;
+            }
+
+            // Mitgliedsstatus
+            $statusRaw        = strtolower(trim($row[$col['Status']] ?? ''));
+            $membershipStatus = match (true) {
+                str_contains($statusRaw, 'ausgetreten') => 'inactive',
+                str_contains($statusRaw, 'inaktiv')     => 'inactive',
+                str_contains($statusRaw, 'gelöscht')    => 'inactive',  // ← NEU
+                str_contains($statusRaw, 'geloescht')   => 'inactive',  // ← NEU (Fallback ohne Umlaut)
+                default                                 => 'active',
+            };
+
+            // Beitragsstatus aus "Betrag offen"
+            $betragOffen   = floatval(trim($row[$col['Betrag offen']] ?? '0'));
+            $paymentStatus = $betragOffen > 0 ? 'open' : 'paid';
+
+            // Geburtsdatum: TT.MM.JJJJ → JJJJ-MM-TT
+            $birthDateRaw = trim($row[$col['Geburtsdatum']] ?? '');
+            $birthDate    = $this->parseBirthDate($birthDateRaw);
+
+            // E-Mail bereinigen
+            $email = trim($row[$col['Email']] ?? '') ?: null;
+
             $data = [
-                'member_number' => trim($row[0]),
-                'first_name' => trim($row[1]),
-                'last_name' => trim($row[2]),
-                'email' => trim($row[3]) ?: null,
-                'membership_status' => trim($row[4]) ?: 'active',
-                'payment_status' => trim($row[5]) ?: 'paid',
-                'birth_date' => trim($row[6]) ?: null,
-                'last_imported_at' => now(),
-                'updated_at' => now(),
+                'member_number'     => $memberNumber,
+                'first_name'        => trim($row[$col['Vorname']] ?? ''),
+                'last_name'         => trim($row[$col['Nachname']] ?? ''),
+                'email'             => $email,
+                'membership_status' => $membershipStatus,
+                'payment_status'    => $paymentStatus,
+                'birth_date'        => $birthDate,
+                'last_imported_at'  => now(),
+                'updated_at'        => now(),
             ];
 
             DB::table('members')->updateOrInsert(
                 ['member_number' => $data['member_number']],
-                array_merge($data, [
-                    'created_at' => now(),
-                ])
+                array_merge($data, ['created_at' => now()])
             );
 
             $imported++;
@@ -91,10 +123,28 @@ class ImportMembers extends Command
 
         Log::info('Members import finished', [
             'imported' => $imported,
-            'skipped' => $skipped,
-            'file' => $csvPath,
+            'skipped'  => $skipped,
+            'file'     => $csvPath,
         ]);
 
         return self::SUCCESS;
+    }
+
+    private function parseBirthDate(string $value): ?string
+    {
+        $value = trim($value);
+        if (empty($value)) return null;
+
+        // TT.MM.JJJJ
+        if (preg_match('/^(\d{2})\.(\d{2})\.(\d{4})$/', $value, $m)) {
+            return "{$m[3]}-{$m[2]}-{$m[1]}";
+        }
+
+        // Bereits JJJJ-MM-TT
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+            return $value;
+        }
+
+        return null;
     }
 }

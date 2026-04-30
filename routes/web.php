@@ -38,7 +38,9 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/staff/kulanz/{registration}', [StaffController::class, 'grantKulanz'])->name('staff.kulanz');
     Route::post('/staff/{registration}/kulanz-checkin', [StaffController::class, 'kulanzCheckin'])->name('staff.kulanz-checkin');
     Route::post('/staff/{registration}/parent-consent', [StaffController::class, 'confirmParentConsent'])->name('staff.parent-consent');
+    Route::post('staff/checkout-all', [StaffController::class, 'checkoutAll'])->name('staff.checkout-all');
     Route::post('/verify/{token}/checkin', [RegistrationController::class, 'checkin'])->name('verify.checkin');
+    
 
     // ==========================================
     // EXKLUSIVER ADMIN-BEREICH

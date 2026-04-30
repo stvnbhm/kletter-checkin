@@ -72,10 +72,11 @@
                 {{-- Mitglieder CSV-Import --}}
                 <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                     <h3 class="text-lg font-semibold text-gray-700 mb-1">📥 Mitglieder importieren</h3>
-                    <p class="text-sm text-gray-400 mb-4">
+                    <p class="mt-1 text-xs text-gray-500">
                         CSV-Datei mit Spalten:
-                        <code class="bg-gray-100 px-1 rounded text-xs">member_number, last_name, first_name, email, membership_status, payment_status</code>
-                        (Komma oder Semikolon als Trennzeichen)
+                        <code class="font-mono">Mitgliedsnummer; Vorname; Nachname; Email; Status; Betrag offen; Geburtsdatum</code>
+                        <br>
+                        Semikolon als Trennzeichen · Datum: TT.MM.JJJJ · Status: <em>aktiv / ausgetreten / gelöscht</em> · Betrag offen: 0 = bezahlt, &gt;0 = offen
                     </p>
                     <form action="{{ route('admin.importMembers') }}" method="POST" enctype="multipart/form-data" class="space-y-3">
                         @csrf

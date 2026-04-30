@@ -271,6 +271,25 @@ class StaffController extends Controller
             ->route('staff')
             ->with('success', '✓ Kulanz erteilt & ' . e($registration->first_name) . ' ' . e($registration->last_name) . ' eingecheckt.');
     }
+    
+    public function checkoutAll(): RedirectResponse
+    {
+        $now = now();
+    
+        $openCheckins = Checkin::whereNull('checked_out_at')->get();
+        $count = $openCheckins->count();
+    
+        foreach ($openCheckins as $checkin) {
+            $checkin->update(['checked_out_at' => $now]);
+    
+            // checked_in_at auf der Registration zurücksetzen
+            Registration::where('id', $checkin->registration_id)
+                ->update(['checked_in_at' => null]);
+        }
+    
+        return redirect()->route('staff')
+            ->with('success', '✓ ' . $count . ' ' . ($count === 1 ? 'Person' : 'Personen') . ' ausgecheckt.');
+    }
 
     public function confirmParentConsent(Registration $registration)
     {
