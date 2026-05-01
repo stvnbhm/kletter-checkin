@@ -70,14 +70,14 @@ class StaffController extends Controller
             }
         }
     
-        // ↓ NEU: Mitglied nicht in CSV → max. 2 Check-ins
+        // ↓ NEU: Mitglied nicht in CSV → max. 3 Check-ins
         $isUnverifiedMember = $registration->member_type === 'member'
                               && $registration->member === null;
     
         if ($isUnverifiedMember) {
             $totalCheckins = Checkin::where('registration_id', $registration->id)->count();
     
-            if ($totalCheckins >= 2) {
+            if ($totalCheckins >= 3) {
                 // Sicherheitsnetz: Status auf red setzen falls noch nicht geschehen
                 $registration->update([
                     'access_status' => 'red',
@@ -86,7 +86,7 @@ class StaffController extends Controller
     
                 return redirect()
                     ->route('staff')
-                    ->with('error', 'Check-in verweigert: Mitgliedsnummer nicht im Mitgliedersystem. Limit von 2 Besuchen ausgeschöpft.');
+                    ->with('error', 'Check-in verweigert: Mitgliedsnummer nicht im Mitgliedersystem. Limit von 3 Besuchen ausgeschöpft.');
             }
         }
     
@@ -101,7 +101,7 @@ class StaffController extends Controller
         if ($isUnverifiedMember) {
             $totalCheckins = Checkin::where('registration_id', $registration->id)->count();
     
-            if ($totalCheckins >= 2) {
+            if ($totalCheckins >= 3) {
                 $registration->update([
                     'access_status' => 'red',
                     'access_reason' => 'Mitgliedsnummer nicht im System – Limit erreicht',
@@ -313,15 +313,25 @@ class StaffController extends Controller
             $registration = Registration::find($checkin->registration_id);
             if (!$registration) continue;
         
-            // checked_in_at zurücksetzen
             $registration->update(['checked_in_at' => null]);
         
-            // Schnupperlimit nach Checkout prüfen
+            // Schnuppergast: nach 3 Besuchen → red
             if ($registration->member_type === 'guest'
                 && $registration->trial_visits_count >= 3) {
                 $registration->update([
                     'access_status' => 'red',
                     'access_reason' => 'Schnupperlimit ausgeschöpft (3/3)',
+                ]);
+            }
+        
+            // NEU: Unverified Member: nach 3 Besuchen → red
+            $isUnverifiedMember = $registration->member_type === 'member'
+                                  && $registration->member === null;
+        
+            if ($isUnverifiedMember && $registration->trial_visits_count >= 3) {
+                $registration->update([
+                    'access_status' => 'red',
+                    'access_reason' => 'Mitgliedsnummer nicht im System – Limit erreicht',
                 ]);
             }
         }

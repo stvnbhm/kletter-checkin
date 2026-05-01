@@ -35,12 +35,23 @@ class AutoCheckoutExpiredCheckins extends Command
                     $registration->update(['checked_in_at' => null]);
                 }
         
-                // NEU: Schnupperlimit nach Checkout prüfen
+                // Schnuppergast: nach 3 Besuchen → red
                 if ($registration->member_type === 'guest'
                     && $registration->trial_visits_count >= 3) {
                     $registration->update([
                         'access_status' => 'red',
                         'access_reason' => 'Schnupperlimit ausgeschöpft (3/3)',
+                    ]);
+                }
+        
+                // NEU: Unverified Member: nach 3 Besuchen → red
+                $isUnverifiedMember = $registration->member_type === 'member'
+                                      && $registration->member === null;
+        
+                if ($isUnverifiedMember && $registration->trial_visits_count >= 3) {
+                    $registration->update([
+                        'access_status' => 'red',
+                        'access_reason' => 'Mitgliedsnummer nicht im System – Limit erreicht',
                     ]);
                 }
             }
