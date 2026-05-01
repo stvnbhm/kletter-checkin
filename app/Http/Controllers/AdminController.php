@@ -163,23 +163,15 @@ class AdminController extends Controller
                         'access_reason' => 'Mitgliedschaft inaktiv',
                     ]);
                 } elseif ($paymentStatus === 'overdue') {
-                    Registration::where('member_number', $memberNumber)
-                        ->where('access_status', 'green')
-                        ->update([
-                            'access_status' => 'orange',
-                            'access_reason' => 'Beitrag offen',
-                        ]);
+                    Registration::where('member_number', $memberNumber)->update([
+                        'access_status' => 'orange',
+                        'access_reason' => 'Beitrag offen',
+                    ]);
                 } else {
-                    Registration::where('member_number', $memberNumber)
-                        ->whereIn('access_status', ['red', 'orange'])
-                        ->where(function ($q) {
-                            $q->where('access_reason', 'like', '%Beitrag offen%')
-                              ->orWhere('access_reason', 'like', '%inaktiv%');
-                        })
-                        ->update([
-                            'access_status' => 'green',
-                            'access_reason' => 'Mitgliedschaft aktiv & bezahlt',
-                        ]);
+                    Registration::where('member_number', $memberNumber)->update([
+                        'access_status' => 'green',
+                        'access_reason' => 'Mitgliedschaft aktiv & bezahlt',
+                    ]);
                 }
     
                 $imported++;
