@@ -88,7 +88,29 @@
                             @error('members_csv')
                                 <p class="text-red-500 text-xs mt-1">{{ $message }}</p>
                             @enderror
+                            @if (session('confirm_missing_count_required'))
+                                <div class="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+                                    Achtung: {{ session('confirm_missing_count_required') }} bestehende Mitglieder fehlen in der CSV.
+                                    Um diese auf „inaktiv“ zu setzen, bitte die Zahl unten exakt eingeben und den Import erneut starten.
+                                </div>
+                            @endif
+                            
+                            <div class="mt-4">
+                                <label for="confirm_missing_count" class="block text-sm font-medium text-gray-700">
+                                    Anzahl fehlender Mitglieder bestätigen
+                                </label>
+                                <input
+                                    type="number"
+                                    name="confirm_missing_count"
+                                    id="confirm_missing_count"
+                                    value="{{ old('confirm_missing_count') }}"
+                                    class="mt-1 block w-48 rounded-md border-gray-300 shadow-sm"
+                                    placeholder="z. B. 12"
+                                >
+                            </div>
+
                         </div>
+                                                
                         <button type="submit"
                             class="w-full bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold py-2 px-4 rounded-lg transition">
                             Importieren

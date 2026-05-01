@@ -68,6 +68,7 @@ class AdminController extends Controller
     {
         $request->validate([
             'members_csv' => ['required', 'file', 'mimes:csv,txt'],
+            'confirm_missing_count' => ['nullable', 'integer'],
         ]);
     
         $storedPath = $request->file('members_csv')->store('imports');
@@ -107,6 +108,7 @@ class AdminController extends Controller
             }
     
             $imported = 0;
+            $importedMemberNumbers[] = $memberNumber;
     
             while (($row = fgetcsv($handle, 0, ';')) !== false) {
                 if (count($row) !== count($headers)) {
@@ -121,6 +123,7 @@ class AdminController extends Controller
                     continue;
                 }
     
+                $importedMemberNumbers[] = $memberNumber;
                 $betragOffen = (float) str_replace(',', '.', trim((string) ($data['Betrag offen'] ?? '0')));
                 $paymentStatus = $betragOffen > 0 ? 'overdue' : 'paid';
                 
@@ -191,7 +194,32 @@ class AdminController extends Controller
     
                 $imported++;
             }
-    
+            
+            $importedMemberNumbers = array_values(array_unique($importedMemberNumbers));
+            
+            $missingMemberNumbers = Member::query()
+                ->whereNotIn('member_number', array_unique($importedMemberNumbers))
+                ->pluck('member_number');
+            
+            $missingCount = $missingMemberNumbers->count();
+            
+            if ($missingCount > 0 && (int) $request->input('confirm_missing_count') !== $missingCount) {
+                return redirect()
+                    ->route('admin.index')
+                    ->with('warning', "Import abgebrochen: {$missingCount} bestehende Mitglieder fehlen in der CSV. Bitte Import erneut starten und diese Anzahl explizit bestätigen.")
+                    ->with('confirm_missing_count_required', $missingCount);
+            }
+            
+            Member::whereIn('member_number', $missingMemberNumbers)->update([
+                'membership_status' => 'inactive',
+                'last_imported_at' => now(),
+            ]);
+            
+            Registration::whereIn('member_number', $missingMemberNumbers)->update([
+                'access_status' => 'red',
+                'access_reason' => 'Mitgliedschaft inaktiv',
+            ]);
+            
             if ($imported === 0) {
                 return redirect()
                     ->route('admin.index')
