@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>Staff | Kletterhalle</title>
+    <title>Check-in | Kletterdom</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 </head>
@@ -36,7 +36,7 @@
             </div>
 
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-                <h2 class="text-xl font-semibold text-gray-800">Staff-Ansicht</h2>
+                <h2 class="text-xl font-semibold text-gray-800">Check-In Ansicht</h2>
                 <div class="flex flex-wrap items-center gap-2">
 
                     {{-- Alle auschecken --}}

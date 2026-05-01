@@ -32,13 +32,13 @@ Route::middleware(['auth'])->group(function () {
     // ==========================================
     // BEREICH FÜR ALLE (Staff & Admin)
     // ==========================================
-    Route::get('/staff', [StaffController::class, 'index'])->name('staff');
-    Route::post('/staff/check-in/{registration}', [StaffController::class, 'checkin'])->name('staff.checkin');
-    Route::post('/staff/import-members', [StaffController::class, 'importMembers'])->name('staff.importMembers');
-    Route::post('/staff/kulanz/{registration}', [StaffController::class, 'grantKulanz'])->name('staff.kulanz');
-    Route::post('/staff/{registration}/kulanz-checkin', [StaffController::class, 'kulanzCheckin'])->name('staff.kulanz-checkin');
-    Route::post('/staff/{registration}/parent-consent', [StaffController::class, 'confirmParentConsent'])->name('staff.parent-consent');
-    Route::post('staff/checkout-all', [StaffController::class, 'checkoutAll'])->name('staff.checkout-all');
+    Route::get('hallendienst', [StaffController::class, 'index'])->name('staff');
+    Route::post('hallendienst/check-in/{registration}', ...)->name('staff.checkin');
+    Route::post('hallendienst/import-members', ...)->name('staff.importMembers');
+    Route::post('hallendienst/kulanz/{registration}', ...)->name('staff.kulanz');
+    Route::post('hallendienst/{registration}/kulanz-checkin', ...)->name('staff.kulanz-checkin');
+    Route::post('hallendienst/{registration}/parent-consent', ...)->name('staff.parent-consent');
+    Route::post('hallendienst/checkout-all', ...)->name('staff.checkout-all');
     Route::post('/verify/{token}/checkin', [RegistrationController::class, 'checkin'])->name('verify.checkin');
     
 
