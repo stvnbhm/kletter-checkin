@@ -122,7 +122,7 @@ class AdminController extends Controller
                 }
     
                 $betragOffen = (float) str_replace(',', '.', trim((string) ($data['Betrag offen'] ?? '0')));
-                $paymentStatus = $betragOffen > 0 ? 'open' : 'paid';
+                $paymentStatus = $betragOffen > 0 ? 'overdue' : 'paid';
                 
                 $birthDate = $this->parseCsvDate($data['Geburtsdatum'] ?? null);
                 $exitDate = $this->parseCsvDate($data['Austrittsdatum'] ?? null);
@@ -162,7 +162,7 @@ class AdminController extends Controller
                         'access_status' => 'red',
                         'access_reason' => 'Mitgliedschaft inaktiv',
                     ]);
-                } elseif ($paymentStatus === 'open') {
+                } elseif ($paymentStatus === 'overdue') {
                     Registration::where('member_number', $memberNumber)
                         ->where('access_status', 'green')
                         ->update([

@@ -160,15 +160,15 @@ class RegistrationController extends Controller
             if (!$member) {
                 $accessStatus  = 'orange';
                 $accessReason  = 'Mitglied noch unbestätigt / nicht in Datenbank';
-                $paymentStatus = 'open';
+                $paymentStatus = 'overdue';
             } elseif (($member->membership_status ?? null) !== 'active') {
                 $accessStatus  = 'red';
                 $accessReason  = 'Mitgliedschaft inaktiv';
-                $paymentStatus = 'open';
-            } elseif (($member->payment_status ?? null) === 'open') {
+                $paymentStatus = 'overdue';
+            } elseif (($member->payment_status ?? null) === 'overdue') {
                 $accessStatus  = 'orange';
                 $accessReason  = 'Beitrag offen';
-                $paymentStatus = 'open';
+                $paymentStatus = 'overdue';
             } else {
                 $accessStatus = 'green';
                 $accessReason = 'Mitgliedschaft aktiv & bezahlt';
