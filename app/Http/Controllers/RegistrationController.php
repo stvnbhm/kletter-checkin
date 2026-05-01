@@ -107,6 +107,12 @@ class RegistrationController extends Controller
                     : null;
 
                 if ($lastNameInput !== $lastNameCsv || $birthInput !== $birthCsv) {
+                    \Log::debug('Member check', [
+    'input_last' => $lastNameInput,
+    'csv_last' => $lastNameCsv,
+    'input_birth' => $birthInput,
+    'csv_birth' => $birthCsv,
+]);
                     throw ValidationException::withMessages([
                         'member_number' => 'Die Mitgliedsnummer stimmt nicht mit den angegebenen Daten (Nachname + Geburtsdatum) überein. Bitte prüfen!',
                     ]);
