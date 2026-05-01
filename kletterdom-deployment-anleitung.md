@@ -78,7 +78,9 @@ services:
       - kletternet
     environment:
       - TZ=Europe/Vienna
-    # KEIN volumes-Mount! vendor/ würde sonst überschrieben.
+    # KEIN volumes-Mount auf den App-Root! vendor/ würde sonst überschrieben.
+    volumes:
+      - ./backups:/var/www/html/storage/backups   # nur Backup-Unterordner
 
   nginx:
     image: nginx:alpine
@@ -136,6 +138,7 @@ FROM php:8.4-fpm
 
 RUN apt-get update && apt-get install -y \
     git curl zip unzip \
+    default-mysql-client \
     libpng-dev libonig-dev libxml2-dev \
     libfreetype6-dev libjpeg62-turbo-dev \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
@@ -158,6 +161,8 @@ RUN chown -R www-data:www-data storage bootstrap/cache
 EXPOSE 9000
 CMD ["php-fpm"]
 ```
+
+> `default-mysql-client` stellt `mysqldump` im Container bereit – wird für automatische Backups benötigt.
 
 ### 3.3 Nginx-Konfiguration (`docker/nginx.conf`)
 
@@ -195,6 +200,65 @@ server {
         deny all;
     }
 }
+```
+
+### 3.4 Backup-Command (`app/Console/Commands/DatabaseBackup.php`)
+
+```php
+<?php
+
+namespace App\Console\Commands;
+
+use Illuminate\Console\Command;
+
+class DatabaseBackup extends Command
+{
+    protected $signature   = 'backup:database';
+    protected $description = 'MySQL Datenbank-Backup erstellen';
+
+    public function handle(): void
+    {
+        $backupDir = storage_path('backups');
+
+        if (!is_dir($backupDir)) {
+            mkdir($backupDir, 0755, true);
+        }
+
+        $date     = now()->format('Y-m-d_H-i-s');
+        $filename = "kletterdom_{$date}.sql.gz";
+        $path     = "{$backupDir}/{$filename}";
+
+        $db       = config('database.connections.mysql.database');
+        $user     = config('database.connections.mysql.username');
+        $password = config('database.connections.mysql.password');
+        $host     = config('database.connections.mysql.host');
+
+        $command = "mysqldump -h {$host} -u {$user} -p{$password} {$db} | gzip > {$path}";
+        exec($command, $output, $exitCode);
+
+        if ($exitCode !== 0) {
+            $this->error('Backup fehlgeschlagen!');
+            \Log::error('DB Backup fehlgeschlagen', ['exit' => $exitCode]);
+            return;
+        }
+
+        // Backups älter als 30 Tage löschen
+        collect(glob("{$backupDir}/*.sql.gz"))
+            ->filter(fn($f) => filemtime($f) < now()->subDays(30)->timestamp)
+            ->each(fn($f) => unlink($f));
+
+        $this->info("✅ Backup gespeichert: {$filename}");
+        \Log::info('DB Backup erfolgreich', ['file' => $filename]);
+    }
+}
+```
+
+### 3.5 Schedule registrieren (`routes/console.php`)
+
+```php
+use App\Console\Commands\DatabaseBackup;
+
+Schedule::command(DatabaseBackup::class)->dailyAt('03:00');
 ```
 
 ---
@@ -316,6 +380,43 @@ Durch `restart: unless-stopped` starten alle Container nach jedem Reboot automat
 
 ---
 
+## Schritt 10: Automatische Backups einrichten
+
+Backups laufen über den **Laravel Scheduler** und werden täglich um 03:00 Uhr erstellt.  
+Die `.sql.gz`-Dateien landen direkt im Projektordner unter `kletter-checkin/backups/` auf dem Pi.
+
+### Cron-Job einrichten (einmalig)
+
+```bash
+crontab -e
+```
+
+Zeile einfügen:
+
+* * * * * cd /home/pi/kletter-checkin && docker compose exec -T app php artisan schedule:run >> /var/log/kletterdom-scheduler.log 2>&1
+
+
+> Dieser eine Cron-Job reicht – der Laravel Scheduler übernimmt ab dann alle zeitgesteuerten Aufgaben (Backups, Auto-Checkout etc.).
+
+### Backup manuell testen
+
+```bash
+# Backup sofort auslösen
+docker compose exec app php artisan backup:database
+
+# Ergebnis prüfen
+ls -lh backups/
+```
+
+### Backup wiederherstellen (Notfall)
+
+```bash
+gunzip < backups/kletterdom_2026-05-01_03-00-00.sql.gz | \
+  docker compose exec -T db mysql -u checkinuser -pSicheresPasswort! klettercheckin
+```
+
+---
+
 ## App aufrufen
 
 | URL | Beschreibung |
@@ -357,6 +458,9 @@ echo "Update fertig!"
 | Alle Logs live | `docker compose logs -f` |
 | In DB einloggen | `docker compose exec db mysql -u checkinuser -p klettercheckin` |
 | Artisan ausführen | `docker compose exec app php artisan <befehl>` |
+| Backup manuell | `docker compose exec app php artisan backup:database` |
+| Backup-Dateien | `ls -lh backups/` |
+| Mitglieder aus DB entfernen | `docker compose exec app php artisan tinker --execute="DB::table('members')->truncate(); echo 'Done‘;“` |
 
 ---
 
@@ -374,7 +478,8 @@ echo "Update fertig!"
 | Assets fehlen / CSS kaputt | Node-Build-Schritt wiederholen |
 | `is_admin` wird nicht gesetzt | `$user->is_admin = 1; $user->save();` statt über `create()` |
 | Pi sehr langsam beim ersten Build | Normal – Docker-Layer werden danach gecacht |
+| Backup fehlgeschlagen | `storage/logs/laravel.log` prüfen; `mysqldump` vorhanden? `docker compose exec app which mysqldump` |
 
 ---
 
-*Kletterdom Check-in System · Deployment Guide · Stand April 2026*
+*Kletterdom Check-in System · Deployment Guide · Stand Mai 2026*

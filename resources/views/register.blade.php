@@ -141,7 +141,7 @@
 
                     <div id="member-number-wrapper">
                         <label for="member_number" class="block text-sm font-medium text-gray-700">Mitgliedsnummer</label>
-                        <input type="text" id="member_number" name="member_number" value="{{ old('member_number') }}" placeholder="z. B. 23-10992" class="p-2 mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                        <input type="text" id="member_number" name="member_number" value="{{ old('member_number') }}" placeholder="z. B. 23-34567" pattern="\d{2}-\d{5}" class="p-2 mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
                         <p class="mt-1 text-xs text-gray-500">Bitte die Vereins-Mitgliedsnummer eingeben.</p>
                         @error('member_number') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
                     </div>
