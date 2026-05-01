@@ -263,7 +263,7 @@ class RegistrationController extends Controller
 
     public function verify(string $token)
     {
-        $registration = Registration::withCurrentCheckin()
+        $registration = Registration::with('currentCheckin')
             ->where('qr_token', $token)
             ->firstOrFail();
 
@@ -272,7 +272,7 @@ class RegistrationController extends Controller
 
     public function checkin(Request $request, string $token)
     {
-        $registration = Registration::withCurrentCheckin()
+        $registration = Registration::with('currentCheckin')
             ->where('qr_token', $token)
             ->first();
 
