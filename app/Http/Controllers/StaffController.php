@@ -108,17 +108,6 @@ class StaffController extends Controller
                 ]);
             }
         }
-        
-        // ↓ NEU: Schnuppergast → nach 3 Besuchen Status red
-        if ($registration->member_type === 'guest') {
-            $registration->refresh();
-            if ($registration->trial_visits_count >= 3) {
-                $registration->update([
-                    'access_status' => 'red',
-                    'access_reason' => 'Schnupperlimit ausgeschöpft (3/3)',
-                ]);
-            }
-        }
     
         return redirect()
             ->route('staff')
@@ -320,10 +309,21 @@ class StaffController extends Controller
     
         foreach ($openCheckins as $checkin) {
             $checkin->update(['checked_out_at' => $now]);
-    
-            // checked_in_at auf der Registration zurücksetzen
-            Registration::where('id', $checkin->registration_id)
-                ->update(['checked_in_at' => null]);
+        
+            $registration = Registration::find($checkin->registration_id);
+            if (!$registration) continue;
+        
+            // checked_in_at zurücksetzen
+            $registration->update(['checked_in_at' => null]);
+        
+            // Schnupperlimit nach Checkout prüfen
+            if ($registration->member_type === 'guest'
+                && $registration->trial_visits_count >= 3) {
+                $registration->update([
+                    'access_status' => 'red',
+                    'access_reason' => 'Schnupperlimit ausgeschöpft (3/3)',
+                ]);
+            }
         }
     
         return redirect()->route('staff')

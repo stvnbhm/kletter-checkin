@@ -23,25 +23,28 @@ class AutoCheckoutExpiredCheckins extends Command
 
         foreach ($expiredCheckins as $checkin) {
             $checkedOutAt = Carbon::parse($checkin->checked_in_at)->copy()->addHours(3);
-
-            $checkin->update([
-                'checked_out_at' => $checkedOutAt,
-            ]);
-
+            $checkin->update(['checked_out_at' => $checkedOutAt]);
+        
             $registration = Registration::find($checkin->registration_id);
-
             if ($registration) {
                 $hasOpenCheckin = Checkin::where('registration_id', $registration->id)
                     ->whereNull('checked_out_at')
                     ->exists();
-
+        
                 if (!$hasOpenCheckin) {
+                    $registration->update(['checked_in_at' => null]);
+                }
+        
+                // NEU: Schnupperlimit nach Checkout prüfen
+                if ($registration->member_type === 'guest'
+                    && $registration->trial_visits_count >= 3) {
                     $registration->update([
-                        'checked_in_at' => null,
+                        'access_status' => 'red',
+                        'access_reason' => 'Schnupperlimit ausgeschöpft (3/3)',
                     ]);
                 }
             }
-
+        
             $closedCount++;
         }
 
