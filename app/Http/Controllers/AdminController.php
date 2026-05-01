@@ -121,8 +121,8 @@ class AdminController extends Controller
                     continue;
                 }
     
-                $betragOffen = trim((string)($data['Betrag offen'] ?? ''));
-                $paymentStatus = $betragOffen ? 'paid' : 'open';
+                $betragOffen = (float) str_replace(',', '.', trim((string) ($data['Betrag offen'] ?? '0')));
+                $paymentStatus = $betragOffen > 0 ? 'open' : 'paid';
                 
                 $birthDate = $this->parseCsvDate($data['GebDatum'] ?? null);
                 $exitDate = $this->parseCsvDate($data['Austrittsdatum'] ?? null);
