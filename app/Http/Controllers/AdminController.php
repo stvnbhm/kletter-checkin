@@ -168,11 +168,17 @@ class AdminController extends Controller
                         'access_reason' => 'Beitrag offen',
                     ]);
                 } else {
-                    Registration::where('member_number', $memberNumber)->update([
+                Registration::where('member_number', $memberNumber)
+                    ->where(function ($q) {
+                        $q->where('access_reason', 'like', '%Mitglied noch unbestätigt / nicht in Datenbank%')
+                          ->orWhere('access_reason', 'like', '%Mitgliedschaft inaktiv%')
+                          ->orWhere('access_reason', 'like', '%Beitrag offen%');
+                    })
+                    ->update([
                         'access_status' => 'green',
                         'access_reason' => 'Mitgliedschaft aktiv & bezahlt',
                     ]);
-                }
+            }
     
                 $imported++;
             }

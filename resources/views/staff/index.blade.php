@@ -225,7 +225,7 @@
                             {{-- ZUTRITT-BADGE: eingecheckt → immer grün ✅ --}}
                             <div class="flex flex-col items-end gap-1 shrink-0">
                                 @if ($currentCheckin)
-                                    <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-bold bg-green-100 text-green-800">
+                                    <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-bold text-green-800">
                                         ✅ Eingecheckt
                                     </span>
                                 @else
@@ -396,7 +396,7 @@
                                     {{-- ZUTRITT-SPALTE: eingecheckt → immer grün ✅ --}}
                                     <td class="px-4 py-4 align-top">
                                         @if ($currentCheckin)
-                                            <span class="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold bg-green-100 text-green-800">
+                                            <span class="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold text-green-800">
                                                 ✅ Eingecheckt
                                             </span>
                                         @else
