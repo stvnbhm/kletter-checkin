@@ -286,6 +286,15 @@ class RegistrationController extends Controller
 
         Checkin::create(['registration_id' => $registration->id, 'checked_in_at' => now()]);
         $registration->increment('trial_visits_count');
+        if ($registration->member_type === 'guest') {
+            $registration->refresh();
+            if ($registration->trial_visits_count >= 3) {
+                $registration->update([
+                    'access_status' => 'red',
+                    'access_reason' => 'Schnupperlimit ausgeschöpft (3/3)',
+                ]);
+            }
+        }
         $message = $registration->first_name . ' ' . $registration->last_name . ' wurde erfolgreich eingecheckt.';
         if ($request->expectsJson()) {
             return response()->json(['success' => true, 'message' => $message]);

@@ -121,14 +121,21 @@ class AdminController extends Controller
                     continue;
                 }
     
-                $betragOffen = trim((string) ($data['Betrag_offen'] ?? ''));
-                $paymentStatus = $betragOffen === '' ? 'paid' : 'open';
-    
-                $birthDate = $this->parseCsvDate($data['Geb_Datum'] ?? null);
+                $betragOffen = trim((string)($data['Betrag offen'] ?? ''));
+                $paymentStatus = $betragOffen ? 'paid' : 'open';
+                
+                $birthDate = $this->parseCsvDate($data['GebDatum'] ?? null);
                 $exitDate = $this->parseCsvDate($data['Austrittsdatum'] ?? null);
-    
+                
+                // NEU: Status-Spalte direkt auslesen
+                $csvStatus = strtolower(trim((string)($data['Status'] ?? '')));
+                
+                $inactiveStatuses = ['gelöscht', 'ausgetreten', 'gesperrt', 'inaktiv', 'gekündigt'];
+                
                 $membershipStatus = 'active';
-                if ($exitDate && $exitDate->isPast()) {
+                if (in_array($csvStatus, $inactiveStatuses, true)) {
+                    $membershipStatus = 'inactive';
+                } elseif ($exitDate && $exitDate->isPast()) {
                     $membershipStatus = 'inactive';
                 }
     
@@ -147,13 +154,16 @@ class AdminController extends Controller
                 
                 // ↓ NEU: Registrierungen synchronisieren
                 if ($membershipStatus === 'active' && $paymentStatus === 'paid') {
-                    Registration::where('member_number', $memberNumber)
-                        ->where('access_status', 'red')
-                        ->where('access_reason', 'like', '%inaktiv%')
-                        ->update([
-                            'access_status' => 'green',
-                            'access_reason' => 'Mitgliedschaft aktiv & bezahlt',
-                        ]);
+                Registration::where('member_number', $memberNumber)
+                    ->where('access_status', 'red')
+                    ->where(function ($q) {
+                        $q->where('access_reason', 'like', '%inaktiv%')
+                          ->orWhere('access_reason', 'like', '%Schnupperlimit%');
+                    })
+                    ->update([
+                        'access_status' => 'green',
+                        'access_reason' => 'Mitgliedschaft aktiv bezahlt',
+                    ]);
                 } elseif ($membershipStatus === 'active' && $paymentStatus === 'open') {
                     Registration::where('member_number', $memberNumber)
                         ->whereIn('access_status', ['red', 'green'])

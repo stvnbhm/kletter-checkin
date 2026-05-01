@@ -35,29 +35,33 @@
                 </div>
             </div>
 
-            <div class="flex items-center justify-between mb-6">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
                 <h2 class="text-xl font-semibold text-gray-800">Staff-Ansicht</h2>
-                
-                {{-- NEU: Alle auschecken --}}
-                <form method="POST" action="{{ route('staff.checkout-all') }}"
-                      onsubmit="return confirm('Alle aktuell eingecheckten Personen auschecken?')">
-                    @csrf
-                    <button type="submit"
-                        class="inline-flex items-center gap-2 bg-white border border-gray-300 text-gray-700 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-red-50 hover:border-red-300 hover:text-red-700 transition">
+                <div class="flex flex-wrap items-center gap-2">
+            
+                    {{-- Alle auschecken --}}
+                    <form method="POST" action="{{ route('staff.checkout-all') }}"
+                          onsubmit="return confirm('Alle aktuell eingecheckten Personen auschecken?')">
+                        @csrf
+                        <button type="submit"
+                            class="inline-flex items-center gap-2 bg-white border border-gray-300 text-gray-700 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-red-50 hover:border-red-300 hover:text-red-700 transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v1"/>
+                            </svg>
+                            Alle auschecken
+                        </button>
+                    </form>
+            
+                    {{-- QR-Scanner --}}
+                    <button id="qr-toggle-btn" onclick="toggleScanner()"
+                        class="inline-flex items-center gap-2 bg-indigo-600 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-indigo-700 transition">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v1"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4h6v6H4V4zm0 10h6v6H4v-6zm10-10h6v6h-6V4zm4 10h2v2h-2v-2zm-4 0h2v2h-2v-2zm0 4h2v2h-2v-2zm4-2h2v2h-2v-2zm0 4h2v2h-2v-2z"/>
                         </svg>
-                        Alle auschecken
+                        QR-Code scannen
                     </button>
-                </form>
-                
-                <button id="qr-toggle-btn" onclick="toggleScanner()"
-                    class="inline-flex items-center gap-2 bg-indigo-600 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-indigo-700 transition">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4h6v6H4V4zm0 10h6v6H4v-6zm10-10h6v6h-6V4zm4 10h2v2h-2v-2zm-4 0h2v2h-2v-2zm0 4h2v2h-2v-2zm4-2h2v2h-2v-2zm0 4h2v2h-2v-2z"/>
-                    </svg>
-                    QR-Code scannen
-                </button>
+            
+                </div>
             </div>
 
             {{-- QR-SCANNER PANEL --}}

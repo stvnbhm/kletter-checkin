@@ -108,6 +108,17 @@ class StaffController extends Controller
                 ]);
             }
         }
+        
+        // ↓ NEU: Schnuppergast → nach 3 Besuchen Status red
+        if ($registration->member_type === 'guest') {
+            $registration->refresh();
+            if ($registration->trial_visits_count >= 3) {
+                $registration->update([
+                    'access_status' => 'red',
+                    'access_reason' => 'Schnupperlimit ausgeschöpft (3/3)',
+                ]);
+            }
+        }
     
         return redirect()
             ->route('staff')
@@ -177,8 +188,13 @@ class StaffController extends Controller
                 $birthDate = $this->parseCsvDate($data['Geb_Datum'] ?? null);
                 $exitDate  = $this->parseCsvDate($data['Austrittsdatum'] ?? null);
 
+                $csvStatus = strtolower(trim((string) ($data['Status'] ?? '')));
+                $inactiveStatuses = ['gelöscht', 'ausgetreten', 'gesperrt', 'inaktiv', 'gekündigt'];
+                
                 $membershipStatus = 'active';
-                if ($exitDate && $exitDate->isPast()) {
+                if (in_array($csvStatus, $inactiveStatuses, true)) {
+                    $membershipStatus = 'inactive';
+                } elseif ($exitDate && $exitDate->isPast()) {
                     $membershipStatus = 'inactive';
                 }
 
@@ -194,6 +210,29 @@ class StaffController extends Controller
                         'last_imported_at'  => now(),
                     ]
                 );
+                
+                // ↓ NEU: Registrierungen synchronisieren
+            if ($membershipStatus === 'active' && $paymentStatus === 'paid') {
+                Registration::where('member_number', $memberNumber)
+                    ->where('access_status', 'red')
+                    ->where(function ($q) {
+                        $q->where('access_reason', 'like', '%inaktiv%')
+                          ->orWhere('access_reason', 'like', '%Schnupperlimit%')
+                          ->orWhere('access_reason', 'like', '%ausgetreten%')
+                          ->orWhere('access_reason', 'like', '%gelöscht%');
+                    })
+                    ->update([
+                        'access_status' => 'green',
+                        'access_reason' => 'Mitgliedschaft aktiv bezahlt',
+                    ]);
+            } elseif ($membershipStatus === 'inactive') {
+                Registration::where('member_number', $memberNumber)
+                    ->where('access_status', '!=', 'red')
+                    ->update([
+                        'access_status' => 'red',
+                        'access_reason' => 'Mitgliedschaft inaktiv',
+                    ]);
+            }
 
                 $imported++;
             }
