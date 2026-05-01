@@ -5405,293 +5405,6 @@ class ImportMembers extends Command
 }
 ````
 
-## File: app/Http/Controllers/AdminController.php
-````php
-<?php
-
-namespace App\Http\Controllers;
-
-use App\Models\Registration;
-use App\Models\Member;
-use App\Models\Checkin;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Carbon\Carbon;
-use Illuminate\Support\Facades\Storage;
-
-class AdminController extends Controller
-{
-    // ── Dashboard ──────────────────────────────────────────
-    public function index()
-    {
-        $registrations = Registration::withCount('checkins')
-            ->orderByDesc('created_at')
-            ->paginate(30);
-
-        // Hallenauslastung: Checkins pro Tag (letzte 30 Tage)
-        $chartData = Checkin::select(
-                DB::raw('DATE(checked_in_at) as day'),
-                DB::raw('COUNT(*) as total')
-            )
-            ->where('checked_in_at', '>=', Carbon::now()->subDays(29)->startOfDay())
-            ->groupBy('day')
-            ->orderBy('day')
-            ->get()
-            ->keyBy('day');
-
-        // Auffüllen: auch Tage ohne Check-ins erscheinen im Chart
-        $labels = [];
-        $values = [];
-        for ($i = 29; $i >= 0; $i--) {
-            $day = Carbon::now()->subDays($i)->toDateString();
-            $labels[] = Carbon::parse($day)->format('d.m');
-            $values[] = $chartData->get($day)->total ?? 0;
-        }
-
-        $stats = [
-            'total_registrations' => Registration::count(),
-            'checked_in_today'    => Checkin::whereDate('checked_in_at', today())->count(),
-            'members'             => Member::count(),
-            'guests_today'        => Checkin::whereDate('checked_in_at', today())
-                // HIER WAR VORHER member_type, DAS HAT GEPASST
-                ->whereHas('registration', fn($q) => $q->where('member_type', 'guest'))
-                ->count(),
-        ];
-
-        return view('admin.index', compact('registrations', 'labels', 'values', 'stats'));
-    }
-
-    // ── Registrierung löschen ──────────────────────────────
-    public function destroyRegistration(Registration $registration)
-    {
-        // Checkins mitlöschen
-        $registration->checkins()->delete();
-        $registration->delete();
-
-        return back()->with('success', 'Registrierung wurde gelöscht.');
-    }
-
-    // ── Mitglieder CSV-Import ──────────────────────────────
-
-    public function importMembers(Request $request)
-    {
-        $request->validate([
-            'members_csv' => ['required', 'file', 'mimes:csv,txt'],
-        ]);
-    
-        $storedPath = $request->file('members_csv')->store('imports');
-    
-        if (!$storedPath) {
-            return redirect()
-                ->route('admin.index')
-                ->with('error', 'CSV konnte nicht sicher gespeichert werden.');
-        }
-    
-        $fullPath = Storage::path($storedPath);
-        $handle = fopen($fullPath, 'r');
-    
-        if (!$handle) {
-            Storage::delete($storedPath);
-    
-            return redirect()
-                ->route('admin.index')
-                ->with('error', 'CSV konnte nicht geöffnet werden.');
-        }
-    
-        try {
-            $headers = fgetcsv($handle, 0, ';');
-    
-            if (!$headers) {
-                return redirect()
-                    ->route('admin.index')
-                    ->with('error', 'CSV konnte nicht gelesen werden.');
-            }
-    
-            $headers[0] = preg_replace('/^\xEF\xBB\xBF/', '', $headers[0]);
-    
-            if (!in_array('Mitgliedsnummer', $headers, true)) {
-                return redirect()
-                    ->route('admin.index')
-                    ->with('error', 'CSV-Format ungültig: Spalte "Mitgliedsnummer" fehlt.');
-            }
-    
-            $imported = 0;
-    
-            while (($row = fgetcsv($handle, 0, ';')) !== false) {
-                if (count($row) !== count($headers)) {
-                    continue;
-                }
-    
-                $data = array_combine($headers, $row);
-    
-                $memberNumber = trim($data['Mitgliedsnummer'] ?? '');
-    
-                if ($memberNumber === '') {
-                    continue;
-                }
-    
-                $betragOffen = trim((string)($data['Betrag offen'] ?? ''));
-                $paymentStatus = $betragOffen ? 'paid' : 'open';
-                
-                $birthDate = $this->parseCsvDate($data['GebDatum'] ?? null);
-                $exitDate = $this->parseCsvDate($data['Austrittsdatum'] ?? null);
-                
-                // NEU: Status-Spalte direkt auslesen
-                $csvStatus = strtolower(trim((string)($data['Status'] ?? '')));
-                
-                $inactiveStatuses = ['gelöscht', 'ausgetreten', 'gesperrt', 'inaktiv', 'gekündigt'];
-                
-                $membershipStatus = 'active';
-                if (in_array($csvStatus, $inactiveStatuses, true)) {
-                    $membershipStatus = 'inactive';
-                } elseif ($exitDate && $exitDate->isPast()) {
-                    $membershipStatus = 'inactive';
-                }
-    
-                Member::updateOrCreate(
-                    ['member_number' => $memberNumber],
-                    [
-                        'first_name' => trim((string) ($data['Vorname'] ?? '')),
-                        'last_name' => trim((string) ($data['Nachname'] ?? '')),
-                        'email' => $this->nullIfEmpty($data['Email'] ?? null),
-                        'birth_date' => $birthDate?->format('Y-m-d'),
-                        'membership_status' => $membershipStatus,
-                        'payment_status' => $paymentStatus,
-                        'last_imported_at' => now(),
-                    ]
-                );
-                
-                // ↓ NEU: Registrierungen synchronisieren
-                if ($membershipStatus === 'active' && $paymentStatus === 'paid') {
-                Registration::where('member_number', $memberNumber)
-                    ->where('access_status', 'red')
-                    ->where(function ($q) {
-                        $q->where('access_reason', 'like', '%inaktiv%')
-                          ->orWhere('access_reason', 'like', '%Schnupperlimit%');
-                    })
-                    ->update([
-                        'access_status' => 'green',
-                        'access_reason' => 'Mitgliedschaft aktiv bezahlt',
-                    ]);
-                } elseif ($membershipStatus === 'active' && $paymentStatus === 'open') {
-                    Registration::where('member_number', $memberNumber)
-                        ->whereIn('access_status', ['red', 'green'])
-                        ->where('access_reason', 'like', '%inaktiv%')
-                        ->update([
-                            'access_status' => 'orange',
-                            'access_reason' => 'Beitrag offen',
-                        ]);
-                } elseif ($membershipStatus === 'inactive') {
-                    Registration::where('member_number', $memberNumber)
-                        ->where('access_status', '!=', 'red')
-                        ->update([
-                            'access_status' => 'red',
-                            'access_reason' => 'Mitgliedschaft inaktiv',
-                        ]);
-                }
-    
-                $imported++;
-            }
-    
-            if ($imported === 0) {
-                return redirect()
-                    ->route('admin.index')
-                    ->with('error', 'CSV wurde gelesen, aber es konnten keine Datensätze importiert werden.');
-            }
-    
-            return redirect()
-                ->route('admin.index')
-                ->with('success', "Mitgliederimport abgeschlossen: {$imported} Datensätze verarbeitet.");
-        } finally {
-            fclose($handle);
-            Storage::delete($storedPath);
-        }
-    }
-
-    // ── Checkins CSV-Export ────────────────────────────────
-    public function exportCheckins(Request $request)
-    {
-        $from = $request->input('from') ? Carbon::parse($request->input('from'))->startOfDay() : Carbon::now()->subDays(30)->startOfDay();
-        $to   = $request->input('to')   ? Carbon::parse($request->input('to'))->endOfDay()     : Carbon::now()->endOfDay();
-    
-        $checkins = Checkin::with('registration')
-            ->whereBetween('checked_in_at', [$from, $to])
-            ->orderBy('checked_in_at')
-            ->get();
-    
-        $filename = 'checkins_' . $from->format('Ymd') . '_' . $to->format('Ymd') . '.csv';
-    
-        $headers = [
-            'Content-Type'        => 'text/csv; charset=UTF-8',
-            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
-        ];
-    
-        $callback = function () use ($checkins) {
-            $handle = fopen('php://output', 'w');
-            fwrite($handle, "\xEF\xBB\xBF");
-    
-            fputcsv($handle, [
-                'Check-in ID',
-                'Vorname',
-                'Nachname',
-                'Geburtsdatum',
-                'Mitgliedstyp',
-                'Mitgliedsnummer',
-                'Check-in Zeit',
-                'Ampelstatus',
-                'Zugangsstatus-Grund',
-                'Schnupperbesuche',
-                'Aufsicht erforderlich',
-            ], ';');
-    
-            foreach ($checkins as $c) {
-                $reg = $c->registration;
-    
-                fputcsv($handle, [
-                    $c->id,
-                    $reg->first_name  ?? '',
-                    $reg->last_name   ?? '',
-                    $reg->birth_date  ? Carbon::parse($reg->birth_date)->format('d.m.Y') : '',
-                    $reg->member_type === 'member' ? 'Mitglied' : 'Gast',
-                    $reg->member_number ?? '',
-                    Carbon::parse($c->checked_in_at)->format('d.m.Y H:i'),
-                    $reg->access_status ?? '',
-                    $reg->access_reason ?? '',
-                    $reg->member_type === 'guest' ? ($reg->trial_visits_count ?? 0) : '',
-                    $reg->needs_supervision ? 'Ja' : 'Nein',
-                ], ';');
-            }
-    
-            fclose($handle);
-        };
-    
-        return response()->stream($callback, 200, $headers);
-    }
-
-    private function parseCsvDate(?string $value): ?Carbon
-    {
-        $value = trim((string) $value);
-
-        if ($value === '') {
-            return null;
-        }
-
-        try {
-            return Carbon::createFromFormat('d.m.Y', $value);
-        } catch (\Throwable $e) {
-            return null;
-        }
-    }
-
-    private function nullIfEmpty(?string $value): ?string
-    {
-        $value = trim((string) $value);
-
-        return $value === '' ? null : $value;
-    }
-}
-````
-
 ## File: docker/nginx.conf
 ````ini
 server {
@@ -6067,6 +5780,76 @@ CACHE_STORE=database
 # Vite
 # -----------------------------------------------
 VITE_APP_NAME="${APP_NAME}"
+````
+
+## File: app/Console/Commands/AutoCheckoutExpiredCheckins.php
+````php
+<?php
+
+namespace App\Console\Commands;
+
+use App\Models\Checkin;
+use App\Models\Registration;
+use Carbon\Carbon;
+use Illuminate\Console\Command;
+
+class AutoCheckoutExpiredCheckins extends Command
+{
+    protected $signature = 'checkins:auto-checkout';
+
+    protected $description = 'Schließt offene Check-ins automatisch nach 3 Stunden';
+
+    public function handle(): int
+    {
+        $expiredCheckins = Checkin::whereNull('checked_out_at')
+            ->where('checked_in_at', '<=', now()->subHours(3))
+            ->get();
+
+        $closedCount = 0;
+
+        foreach ($expiredCheckins as $checkin) {
+            $checkedOutAt = Carbon::parse($checkin->checked_in_at)->copy()->addHours(3);
+            $checkin->update(['checked_out_at' => $checkedOutAt]);
+        
+            $registration = Registration::find($checkin->registration_id);
+            if ($registration) {
+                $hasOpenCheckin = Checkin::where('registration_id', $registration->id)
+                    ->whereNull('checked_out_at')
+                    ->exists();
+        
+                if (!$hasOpenCheckin) {
+                    $registration->update(['checked_in_at' => null]);
+                }
+        
+                // Schnuppergast: nach 3 Besuchen → red
+                if ($registration->member_type === 'guest'
+                    && $registration->trial_visits_count >= 3) {
+                    $registration->update([
+                        'access_status' => 'red',
+                        'access_reason' => 'Schnupperlimit ausgeschöpft (3/3)',
+                    ]);
+                }
+        
+                // NEU: Unverified Member: nach 3 Besuchen → red
+                $isUnverifiedMember = $registration->member_type === 'member'
+                                      && $registration->member === null;
+        
+                if ($isUnverifiedMember && $registration->trial_visits_count >= 3) {
+                    $registration->update([
+                        'access_status' => 'red',
+                        'access_reason' => 'Mitgliedsnummer nicht im System – Limit erreicht',
+                    ]);
+                }
+            }
+        
+            $closedCount++;
+        }
+
+        $this->info("Auto-Checkout abgeschlossen: {$closedCount} Check-ins geschlossen.");
+
+        return self::SUCCESS;
+    }
+}
 ````
 
 ## File: kletterdom-deployment-anleitung.md
@@ -6533,7 +6316,7 @@ echo "Update fertig!"
 | Artisan ausführen | `docker compose exec app php artisan <befehl>` |
 | Backup manuell | `docker compose exec app php artisan backup:database` |
 | Backup-Dateien | `ls -lh backups/` |
-| Mitglieder aus DB entfernen | `docker compose exec app php artisan tinker --execute="DB::table('members')->truncate(); echo 'Done‘;“` |
+| Mitglieder aus DB entfernen | `‌docker compose exec app php artisan tinker --execute="DB::table('members')->truncate(); echo 'Done';"` |
 
 ---
 
@@ -6558,372 +6341,291 @@ echo "Update fertig!"
 *Kletterdom Check-in System · Deployment Guide · Stand Mai 2026*
 ````
 
-## File: app/Console/Commands/AutoCheckoutExpiredCheckins.php
+## File: app/Http/Controllers/AdminController.php
 ````php
 <?php
 
-namespace App\Console\Commands;
+namespace App\Http\Controllers;
 
-use App\Models\Checkin;
 use App\Models\Registration;
+use App\Models\Member;
+use App\Models\Checkin;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
-use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Storage;
 
-class AutoCheckoutExpiredCheckins extends Command
+class AdminController extends Controller
 {
-    protected $signature = 'checkins:auto-checkout';
-
-    protected $description = 'Schließt offene Check-ins automatisch nach 3 Stunden';
-
-    public function handle(): int
+    // ── Dashboard ──────────────────────────────────────────
+    public function index()
     {
-        $expiredCheckins = Checkin::whereNull('checked_out_at')
-            ->where('checked_in_at', '<=', now()->subHours(3))
-            ->get();
+        $registrations = Registration::withCount('checkins')
+            ->orderByDesc('created_at')
+            ->paginate(30);
 
-        $closedCount = 0;
+        // Hallenauslastung: Checkins pro Tag (letzte 30 Tage)
+        $chartData = Checkin::select(
+                DB::raw('DATE(checked_in_at) as day'),
+                DB::raw('COUNT(*) as total')
+            )
+            ->where('checked_in_at', '>=', Carbon::now()->subDays(29)->startOfDay())
+            ->groupBy('day')
+            ->orderBy('day')
+            ->get()
+            ->keyBy('day');
 
-        foreach ($expiredCheckins as $checkin) {
-            $checkedOutAt = Carbon::parse($checkin->checked_in_at)->copy()->addHours(3);
-            $checkin->update(['checked_out_at' => $checkedOutAt]);
-        
-            $registration = Registration::find($checkin->registration_id);
-            if ($registration) {
-                $hasOpenCheckin = Checkin::where('registration_id', $registration->id)
-                    ->whereNull('checked_out_at')
-                    ->exists();
-        
-                if (!$hasOpenCheckin) {
-                    $registration->update(['checked_in_at' => null]);
-                }
-        
-                // Schnuppergast: nach 3 Besuchen → red
-                if ($registration->member_type === 'guest'
-                    && $registration->trial_visits_count >= 3) {
-                    $registration->update([
-                        'access_status' => 'red',
-                        'access_reason' => 'Schnupperlimit ausgeschöpft (3/3)',
-                    ]);
-                }
-        
-                // NEU: Unverified Member: nach 3 Besuchen → red
-                $isUnverifiedMember = $registration->member_type === 'member'
-                                      && $registration->member === null;
-        
-                if ($isUnverifiedMember && $registration->trial_visits_count >= 3) {
-                    $registration->update([
-                        'access_status' => 'red',
-                        'access_reason' => 'Mitgliedsnummer nicht im System – Limit erreicht',
-                    ]);
-                }
-            }
-        
-            $closedCount++;
+        // Auffüllen: auch Tage ohne Check-ins erscheinen im Chart
+        $labels = [];
+        $values = [];
+        for ($i = 29; $i >= 0; $i--) {
+            $day = Carbon::now()->subDays($i)->toDateString();
+            $labels[] = Carbon::parse($day)->format('d.m');
+            $values[] = $chartData->get($day)->total ?? 0;
         }
 
-        $this->info("Auto-Checkout abgeschlossen: {$closedCount} Check-ins geschlossen.");
+        $stats = [
+            'total_registrations' => Registration::count(),
+            'checked_in_today'    => Checkin::whereDate('checked_in_at', today())->count(),
+            'members'             => Member::count(),
+            'guests_today'        => Checkin::whereDate('checked_in_at', today())
+                // HIER WAR VORHER member_type, DAS HAT GEPASST
+                ->whereHas('registration', fn($q) => $q->where('member_type', 'guest'))
+                ->count(),
+        ];
 
-        return self::SUCCESS;
+        return view('admin.index', compact('registrations', 'labels', 'values', 'stats'));
+    }
+
+    // ── Registrierung löschen ──────────────────────────────
+    public function destroyRegistration(Registration $registration)
+    {
+        // Checkins mitlöschen
+        $registration->checkins()->delete();
+        $registration->delete();
+
+        return back()->with('success', 'Registrierung wurde gelöscht.');
+    }
+
+    // ── Mitglieder CSV-Import ──────────────────────────────
+
+    public function importMembers(Request $request)
+    {
+        $request->validate([
+            'members_csv' => ['required', 'file', 'mimes:csv,txt'],
+        ]);
+    
+        $storedPath = $request->file('members_csv')->store('imports');
+    
+        if (!$storedPath) {
+            return redirect()
+                ->route('admin.index')
+                ->with('error', 'CSV konnte nicht sicher gespeichert werden.');
+        }
+    
+        $fullPath = Storage::path($storedPath);
+        $handle = fopen($fullPath, 'r');
+    
+        if (!$handle) {
+            Storage::delete($storedPath);
+    
+            return redirect()
+                ->route('admin.index')
+                ->with('error', 'CSV konnte nicht geöffnet werden.');
+        }
+    
+        try {
+            $headers = fgetcsv($handle, 0, ';');
+    
+            if (!$headers) {
+                return redirect()
+                    ->route('admin.index')
+                    ->with('error', 'CSV konnte nicht gelesen werden.');
+            }
+    
+            $headers[0] = preg_replace('/^\xEF\xBB\xBF/', '', $headers[0]);
+    
+            if (!in_array('Mitgliedsnummer', $headers, true)) {
+                return redirect()
+                    ->route('admin.index')
+                    ->with('error', 'CSV-Format ungültig: Spalte "Mitgliedsnummer" fehlt.');
+            }
+    
+            $imported = 0;
+    
+            while (($row = fgetcsv($handle, 0, ';')) !== false) {
+                if (count($row) !== count($headers)) {
+                    continue;
+                }
+    
+                $data = array_combine($headers, $row);
+    
+                $memberNumber = trim($data['Mitgliedsnummer'] ?? '');
+    
+                if ($memberNumber === '') {
+                    continue;
+                }
+    
+                $betragOffen = (float) str_replace(',', '.', trim((string) ($data['Betrag offen'] ?? '0')));
+                $paymentStatus = $betragOffen > 0 ? 'open' : 'paid';
+                
+                $birthDate = $this->parseCsvDate($data['Geburtsdatum'] ?? null);
+                $exitDate = $this->parseCsvDate($data['Austrittsdatum'] ?? null);
+                
+                // NEU: Status-Spalte direkt auslesen
+                $csvStatus = strtolower(trim((string)($data['Status'] ?? '')));
+                
+                $inactiveStatuses = ['gelöscht', 'ausgetreten', 'gesperrt', 'inaktiv', 'gekündigt'];
+                
+                $membershipStatus = 'active';
+                if (in_array($csvStatus, $inactiveStatuses, true)) {
+                    $membershipStatus = 'inactive';
+                } elseif ($exitDate && $exitDate->isPast()) {
+                    $membershipStatus = 'inactive';
+                }
+    
+                Member::updateOrCreate(
+                    ['member_number' => $memberNumber],
+                    [
+                        'first_name' => trim((string) ($data['Vorname'] ?? '')),
+                        'last_name' => trim((string) ($data['Nachname'] ?? '')),
+                        'email' => $this->nullIfEmpty($data['Email'] ?? null),
+                        'birth_date' => $birthDate?->format('Y-m-d'),
+                        'membership_status' => $membershipStatus,
+                        'payment_status' => $paymentStatus,
+                        'last_imported_at' => now(),
+                    ]
+                );
+                
+                // ↓ NEU: Registrierungen synchronisieren
+                if ($membershipStatus === 'active' && $paymentStatus === 'paid') {
+                Registration::where('member_number', $memberNumber)
+                    ->where('access_status', 'red')
+                    ->where(function ($q) {
+                        $q->where('access_reason', 'like', '%inaktiv%')
+                          ->orWhere('access_reason', 'like', '%Schnupperlimit%');
+                    })
+                    ->update([
+                        'access_status' => 'green',
+                        'access_reason' => 'Mitgliedschaft aktiv bezahlt',
+                    ]);
+                } elseif ($membershipStatus === 'active' && $paymentStatus === 'open') {
+                    Registration::where('member_number', $memberNumber)
+                        ->whereIn('access_status', ['red', 'green'])
+                        ->where('access_reason', 'like', '%inaktiv%')
+                        ->update([
+                            'access_status' => 'orange',
+                            'access_reason' => 'Beitrag offen',
+                        ]);
+                } elseif ($membershipStatus === 'inactive') {
+                    Registration::where('member_number', $memberNumber)
+                        ->where('access_status', '!=', 'red')
+                        ->update([
+                            'access_status' => 'red',
+                            'access_reason' => 'Mitgliedschaft inaktiv',
+                        ]);
+                }
+    
+                $imported++;
+            }
+    
+            if ($imported === 0) {
+                return redirect()
+                    ->route('admin.index')
+                    ->with('error', 'CSV wurde gelesen, aber es konnten keine Datensätze importiert werden.');
+            }
+    
+            return redirect()
+                ->route('admin.index')
+                ->with('success', "Mitgliederimport abgeschlossen: {$imported} Datensätze verarbeitet.");
+        } finally {
+            fclose($handle);
+            Storage::delete($storedPath);
+        }
+    }
+
+    // ── Checkins CSV-Export ────────────────────────────────
+    public function exportCheckins(Request $request)
+    {
+        $from = $request->input('from') ? Carbon::parse($request->input('from'))->startOfDay() : Carbon::now()->subDays(30)->startOfDay();
+        $to   = $request->input('to')   ? Carbon::parse($request->input('to'))->endOfDay()     : Carbon::now()->endOfDay();
+    
+        $checkins = Checkin::with('registration')
+            ->whereBetween('checked_in_at', [$from, $to])
+            ->orderBy('checked_in_at')
+            ->get();
+    
+        $filename = 'checkins_' . $from->format('Ymd') . '_' . $to->format('Ymd') . '.csv';
+    
+        $headers = [
+            'Content-Type'        => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ];
+    
+        $callback = function () use ($checkins) {
+            $handle = fopen('php://output', 'w');
+            fwrite($handle, "\xEF\xBB\xBF");
+    
+            fputcsv($handle, [
+                'Check-in ID',
+                'Vorname',
+                'Nachname',
+                'Geburtsdatum',
+                'Mitgliedstyp',
+                'Mitgliedsnummer',
+                'Check-in Zeit',
+                'Ampelstatus',
+                'Zugangsstatus-Grund',
+                'Schnupperbesuche',
+                'Aufsicht erforderlich',
+            ], ';');
+    
+            foreach ($checkins as $c) {
+                $reg = $c->registration;
+    
+                fputcsv($handle, [
+                    $c->id,
+                    $reg->first_name  ?? '',
+                    $reg->last_name   ?? '',
+                    $reg->birth_date  ? Carbon::parse($reg->birth_date)->format('d.m.Y') : '',
+                    $reg->member_type === 'member' ? 'Mitglied' : 'Gast',
+                    $reg->member_number ?? '',
+                    Carbon::parse($c->checked_in_at)->format('d.m.Y H:i'),
+                    $reg->access_status ?? '',
+                    $reg->access_reason ?? '',
+                    $reg->member_type === 'guest' ? ($reg->trial_visits_count ?? 0) : '',
+                    $reg->needs_supervision ? 'Ja' : 'Nein',
+                ], ';');
+            }
+    
+            fclose($handle);
+        };
+    
+        return response()->stream($callback, 200, $headers);
+    }
+
+    private function parseCsvDate(?string $value): ?Carbon
+    {
+        $value = trim((string) $value);
+
+        if ($value === '') {
+            return null;
+        }
+
+        try {
+            return Carbon::createFromFormat('d.m.Y', $value);
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    private function nullIfEmpty(?string $value): ?string
+    {
+        $value = trim((string) $value);
+
+        return $value === '' ? null : $value;
     }
 }
-````
-
-## File: resources/views/admin/index.blade.php
-````php
-<!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>Admin | Kletterdom</title>
-
-    @vite(['resources/css/app.css', 'resources/js/app.js'])
-</head>
-<body class="font-sans antialiased bg-gray-50 text-gray-900">
-
-    @include('layouts.navigation')
-
-    <header class="bg-white shadow">
-        <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-            <div class="flex items-center justify-between">
-                <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-                    🛠️ Admin-Bereich
-                </h2>
-                <span class="text-sm text-gray-500">Hallenverwaltung</span>
-            </div>
-        </div>
-    </header>
-
-    <main class="py-6">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-
-            {{-- Flash Messages --}}
-            @if (session('success'))
-                <div class="bg-green-100 border border-green-300 text-green-800 px-4 py-3 rounded-lg flex items-center gap-2">
-                    <span>✅</span> {{ session('success') }}
-                </div>
-            @endif
-            @if (session('error'))
-                <div class="bg-red-100 border border-red-300 text-red-800 px-4 py-3 rounded-lg flex items-center gap-2">
-                    <span>❌</span> {{ session('error') }}
-                </div>
-            @endif
-
-            {{-- ── KPI-Karten ──────────────────────────────────────── --}}
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
-                    <div class="text-3xl font-bold text-teal-600">{{ $stats['checked_in_today'] }}</div>
-                    <div class="text-sm text-gray-500 mt-1">Heute eingecheckt</div>
-                </div>
-                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
-                    <div class="text-3xl font-bold text-blue-500">{{ $stats['guests_today'] }}</div>
-                    <div class="text-sm text-gray-500 mt-1">Davon Gäste heute</div>
-                </div>
-                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
-                    <div class="text-3xl font-bold text-gray-700">{{ $stats['total_registrations'] }}</div>
-                    <div class="text-sm text-gray-500 mt-1">Registrierungen gesamt</div>
-                </div>
-                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
-                    <div class="text-3xl font-bold text-purple-500">{{ $stats['members'] }}</div>
-                    <div class="text-sm text-gray-500 mt-1">Mitglieder (CSV)</div>
-                </div>
-            </div>
-
-            {{-- ── Hallenauslastung Chart ───────────────────────────── --}}
-            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                <h3 class="text-lg font-semibold text-gray-700 mb-4">📊 Hallenauslastung – letzte 30 Tage</h3>
-                <div class="relative" style="height: 220px;">
-                    <canvas id="auslastungChart"></canvas>
-                </div>
-            </div>
-
-            {{-- ── Zwei-Spalten-Grid: Import + Export ──────────────── --}}
-            <div class="grid md:grid-cols-2 gap-6">
-
-                {{-- Mitglieder CSV-Import --}}
-                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                    <h3 class="text-lg font-semibold text-gray-700 mb-1">📥 Mitglieder importieren</h3>
-                    <p class="mt-1 text-xs text-gray-500">
-                        CSV-Datei mit Spalten:
-                        <code class="font-mono">Mitgliedsnummer; Nachname; Vorname; Email; Status; Betrag offen; Geburtsdatum</code>
-                    </p>
-                    <form action="{{ route('admin.importMembers') }}" method="POST" enctype="multipart/form-data" class="space-y-3">
-                        @csrf
-                        <div>
-                            <label class="block text-sm font-medium text-gray-600 mb-1">CSV-Datei wählen</label>
-                            <input type="file" name="members_csv" accept=".csv,.txt"
-                                class="block w-full text-sm text-gray-500
-                                       file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0
-                                       file:text-sm file:font-semibold file:bg-teal-50 file:text-teal-700
-                                       hover:file:bg-teal-100 border border-gray-200 rounded-lg p-1">
-                            @error('members_csv')
-                                <p class="text-red-500 text-xs mt-1">{{ $message }}</p>
-                            @enderror
-                        </div>
-                        <button type="submit"
-                            class="w-full bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold py-2 px-4 rounded-lg transition">
-                            Importieren
-                        </button>
-                    </form>
-                </div>
-
-                {{-- Check-ins CSV-Export --}}
-                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                    <h3 class="text-lg font-semibold text-gray-700 mb-1">📤 Check-ins exportieren</h3>
-                    <p class="text-sm text-gray-400 mb-4">
-                        Exportiert alle Check-ins im gewählten Zeitraum als CSV (Excel-kompatibel, UTF-8 BOM, Semikolon-getrennt).
-                    </p>
-                    <form action="{{ route('admin.exportCheckins') }}" method="GET" class="space-y-3">
-                        <div class="grid grid-cols-2 gap-3">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-600 mb-1">Von</label>
-                                <input type="date" name="from" value="{{ now()->subDays(30)->toDateString() }}"
-                                    class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-400 focus:outline-none">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-600 mb-1">Bis</label>
-                                <input type="date" name="to" value="{{ now()->toDateString() }}"
-                                    class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-400 focus:outline-none">
-                            </div>
-                        </div>
-                        <button type="submit"
-                            class="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold py-2 px-4 rounded-lg transition">
-                            CSV herunterladen
-                        </button>
-                    </form>
-                </div>
-            </div>
-
-            {{-- ── Registrierungen Tabelle ─────────────────────────── --}}
-            <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                    <h3 class="text-lg font-semibold text-gray-700">👥 Alle Registrierungen</h3>
-                    <span class="text-sm text-gray-400">{{ $registrations->total() }} gesamt</span>
-                </div>
-
-                {{-- Desktop-Tabelle --}}
-                <div class="hidden md:block overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-100 text-sm">
-                        <thead class="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
-                            <tr>
-                                <th class="px-4 py-3 text-left">Name</th>
-                                <th class="px-4 py-3 text-left">Typ</th>
-                                <th class="px-4 py-3 text-left">Mitgliedsnr.</th>
-                                <th class="px-4 py-3 text-left">Status</th>
-                                <th class="px-4 py-3 text-left">Check-ins</th>
-                                <th class="px-4 py-3 text-left">Registriert am</th>
-                                <th class="px-4 py-3 text-left">Aktion</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-50">
-                            @forelse ($registrations as $reg)
-                                <tr class="hover:bg-gray-50 transition">
-                                    <td class="px-4 py-3 font-medium text-gray-800">
-                                        {{ $reg->first_name }} {{ $reg->last_name }}
-                                        @if ($reg->birth_date)
-                                            <div class="text-xs text-gray-400">{{ $reg->birth_date->format('d.m.Y') }}</div>
-                                        @endif
-                                    </td>
-                                    <td class="px-4 py-3">
-                                        @if ($reg->member_type === 'member')
-                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Mitglied</span>
-                                        @else
-                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">Gast</span>
-                                        @endif
-                                    </td>
-                                    <td class="px-4 py-3 text-gray-500">{{ $reg->member_number ?? '–' }}</td>
-                                    <td class="px-4 py-3">
-                                        @php
-                                            $colors = [
-                                                'green'  => 'bg-green-100 text-green-700',
-                                                'blue'   => 'bg-blue-100 text-blue-700',
-                                                'orange' => 'bg-orange-100 text-orange-700',
-                                                'red'    => 'bg-red-100 text-red-700',
-                                            ];
-                                            $cls = $colors[$reg->access_status] ?? 'bg-gray-100 text-gray-600';
-                                        @endphp
-                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {{ $cls }}">
-                                            {{ $reg->access_status }}
-                                        </span>
-                                    </td>
-                                    <td class="px-4 py-3 text-gray-600 tabular-nums">{{ $reg->checkins_count ?? $reg->checkins->count() }}</td>
-                                    <td class="px-4 py-3 text-gray-400 text-xs">{{ $reg->created_at->format('d.m.Y H:i') }}</td>
-                                    <td class="px-4 py-3">
-                                        <form action="{{ route('admin.registrations.destroy', $reg) }}" method="POST"
-                                              onsubmit="return confirm('Registrierung von {{ addslashes($reg->first_name . ' ' . $reg->last_name) }} wirklich löschen? Alle Check-ins werden mitgelöscht.')">
-                                            @csrf
-                                            @method('DELETE')
-                                            <button type="submit"
-                                                class="text-xs text-red-500 hover:text-red-700 hover:underline transition">
-                                                Löschen
-                                            </button>
-                                        </form>
-                                    </td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="7" class="px-4 py-10 text-center text-gray-400">
-                                        Noch keine Registrierungen vorhanden.
-                                    </td>
-                                </tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-
-                {{-- Mobile Cards --}}
-                <div class="md:hidden divide-y divide-gray-100">
-                    @forelse ($registrations as $reg)
-                        <div class="px-4 py-4 flex items-start justify-between gap-3">
-                            <div class="flex-1 min-w-0">
-                                <div class="font-semibold text-gray-800 truncate">{{ $reg->first_name }} {{ $reg->last_name }}</div>
-                                <div class="text-xs text-gray-400 mt-0.5">
-                                    {{ $reg->member_type === 'member' ? 'Mitglied' : 'Gast' }}
-                                    @if ($reg->member_number) · {{ $reg->member_number }} @endif
-                                    · {{ $reg->checkins->count() }} Check-ins
-                                </div>
-                                @php $colors = ['green'=>'text-green-600','blue'=>'text-blue-500','orange'=>'text-orange-500','red'=>'text-red-500']; @endphp
-                                <div class="text-xs font-medium mt-1 {{ $colors[$reg->access_status] ?? 'text-gray-500' }}">
-                                    ● {{ $reg->access_status }}
-                                </div>
-                            </div>
-                            <form action="{{ route('admin.registrations.destroy', $reg) }}" method="POST"
-                                  onsubmit="return confirm('Wirklich löschen?')">
-                                @csrf
-                                @method('DELETE')
-                                <button type="submit" class="text-xs text-red-400 hover:text-red-600 shrink-0">🗑️</button>
-                            </form>
-                        </div>
-                    @empty
-                        <div class="px-4 py-10 text-center text-gray-400">Keine Registrierungen.</div>
-                    @endforelse
-                </div>
-
-                {{-- Pagination --}}
-                @if ($registrations->hasPages())
-                    <div class="px-6 py-4 border-t border-gray-100">
-                        {{ $registrations->links() }}
-                    </div>
-                @endif
-            </div>
-
-        </div>
-    </main>
-
-    {{-- Chart.js --}}
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <script>
-        const labels = @json($labels);
-        const values = @json($values);
-
-        new Chart(document.getElementById('auslastungChart'), {
-            type: 'bar',
-            data: {
-                labels,
-                datasets: [{
-                    label: 'Check-ins',
-                    data: values,
-                    backgroundColor: 'rgba(13, 148, 136, 0.7)',   // teal-600
-                    borderColor:     'rgba(13, 148, 136, 1)',
-                    borderWidth: 1,
-                    borderRadius: 4,
-                    borderSkipped: false,
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            label: ctx => ` ${ctx.parsed.y} Check-in${ctx.parsed.y !== 1 ? 's' : ''}`
-                        }
-                    }
-                },
-                scales: {
-                    x: {
-                        grid: { display: false },
-                        ticks: {
-                            font: { size: 11 },
-                            maxRotation: 45,
-                            callback: function(val, index) {
-                                return index % 3 === 0 ? this.getLabelForValue(val) : '';
-                            }
-                        }
-                    },
-                    y: {
-                        beginAtZero: true,
-                        ticks: { precision: 0, font: { size: 11 } },
-                        grid: { color: 'rgba(0,0,0,0.05)' }
-                    }
-                }
-            }
-        });
-    </script>
-</body>
-</html>
 ````
 
 ## File: resources/views/register.blade.php
@@ -7273,344 +6975,302 @@ class AutoCheckoutExpiredCheckins extends Command
 </html>
 ````
 
-## File: app/Http/Controllers/RegistrationController.php
+## File: resources/views/admin/index.blade.php
 ````php
-<?php
+<!DOCTYPE html>
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>Admin | Kletterdom</title>
 
-namespace App\Http\Controllers;
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
+</head>
+<body class="font-sans antialiased bg-gray-50 text-gray-900">
 
-use App\Models\Member;
-use App\Models\Checkin;
-use App\Models\Registration;
-use Carbon\Carbon;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
+    @include('layouts.navigation')
 
-class RegistrationController extends Controller
-{
-    public function create(Request $request)
-    {
-        $request->session()->put('register_form_started_at', now()->timestamp);
-        return view('register');
-    }
+    <header class="bg-white shadow">
+        <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between">
+                <h2 class="font-semibold text-xl text-gray-800 leading-tight">
+                    🛠️ Admin-Bereich
+                </h2>
+                <span class="text-sm text-gray-500">Hallenverwaltung</span>
+            </div>
+        </div>
+    </header>
 
-    public function store(Request $request)
-    {
-        // Honeypot-Spam-Schutz
-        if (filled($request->input('website')) || filled($request->input('fax_number'))) {
-            \Log::warning('Spam blockiert: Honeypot-Feld ausgefüllt', [
-                'ip' => $request->ip(),
-                'ua' => $request->userAgent(),
-            ]);
-            throw ValidationException::withMessages([
-                'first_name' => 'Die Registrierung konnte nicht verarbeitet werden. Bitte versuche es erneut.',
-            ]);
-        }
+    <main class="py-6">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
 
-        $formStartedAt = (int) $request->session()->get('register_form_started_at', 0);
-        $secondsTaken  = now()->timestamp - $formStartedAt;
-        if ($formStartedAt > 0 && $secondsTaken < 3) {
-            \Log::warning('Spam blockiert: Formular zu schnell abgesendet', [
-                'ip'           => $request->ip(),
-                'ua'           => $request->userAgent(),
-                'secondstaken' => $secondsTaken,
-            ]);
-            throw ValidationException::withMessages([
-                'first_name' => 'Die Registrierung konnte nicht verarbeitet werden. Bitte versuche es erneut.',
-            ]);
-        }
+            {{-- Flash Messages --}}
+            @if (session('success'))
+                <div class="bg-green-100 border border-green-300 text-green-800 px-4 py-3 rounded-lg flex items-center gap-2">
+                    <span>✅</span> {{ session('success') }}
+                </div>
+            @endif
+            @if (session('error'))
+                <div class="bg-red-100 border border-red-300 text-red-800 px-4 py-3 rounded-lg flex items-center gap-2">
+                    <span>❌</span> {{ session('error') }}
+                </div>
+            @endif
 
-        $validated = $request->validate([
-            'first_name'          => 'required|string|max:255',
-            'last_name'           => 'required|string|max:255',
-            'birth_date'          => 'required|date|after_or_equal:1900-01-01|before_or_equal:today',
-            'email'              => 'nullable|email|max:255',
-            'member_type'         => 'required|in:member,guest',
-            'member_number'       => [
-                'required_if:member_type,member',
-                'nullable',
-                'string',
-                // ✅ NEU: Format XX-XXXXX erzwingen
-                'regex:/^\d{2}-\d{5}$/',
-            ],
-            'waiver_accepted'     => 'required|accepted',
-            'rules_accepted'     => 'required|accepted',
-            'supervision_confirmed' => 'nullable|boolean',
-            // Honeypot-Felder
-            'hp_time'             => 'required|integer',
-            'website'            => 'nullable|max:0',
-            'fax_number'          => 'nullable|max:0',
-        ], [
-            'birthdate.required'   => 'Das Geburtsdatum ist erforderlich, um doppelte Registrierungen zu vermeiden.',
-            // ✅ NEU: Fehlermeldung für Format-Validierung
-            'member_number.regex'   => 'Die Mitgliedsnummer muss im Format XX-XXXXX eingegeben werden (z.B. 12-34567).',
-        ]);
+            {{-- ── KPI-Karten ──────────────────────────────────────── --}}
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+                    <div class="text-3xl font-bold text-teal-600">{{ $stats['checked_in_today'] }}</div>
+                    <div class="text-sm text-gray-500 mt-1">Heute eingecheckt</div>
+                </div>
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+                    <div class="text-3xl font-bold text-blue-500">{{ $stats['guests_today'] }}</div>
+                    <div class="text-sm text-gray-500 mt-1">Davon Gäste heute</div>
+                </div>
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+                    <div class="text-3xl font-bold text-gray-700">{{ $stats['total_registrations'] }}</div>
+                    <div class="text-sm text-gray-500 mt-1">Registrierungen gesamt</div>
+                </div>
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+                    <div class="text-3xl font-bold text-purple-500">{{ $stats['members'] }}</div>
+                    <div class="text-sm text-gray-500 mt-1">Mitglieder (CSV)</div>
+                </div>
+            </div>
 
-        // Freitextfelder bereinigen
-        $validated['first_name']    = strip_tags($validated['first_name']);
-        $validated['last_name']     = strip_tags($validated['last_name']);
-        $validated['member_number'] = isset($validated['member_number'])
-            ? strip_tags($validated['member_number'])
-            : null;
+            {{-- ── Hallenauslastung Chart ───────────────────────────── --}}
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                <h3 class="text-lg font-semibold text-gray-700 mb-4">📊 Hallenauslastung – letzte 30 Tage</h3>
+                <div class="relative" style="height: 220px;">
+                    <canvas id="auslastungChart"></canvas>
+                </div>
+            </div>
 
-        $birthDate       = Carbon::parse($validated['birth_date']);
-        $age             = $birthDate->age;
-        $needsSupervision   = $age < 14;
-        $needsParentConsent = $age >= 14 && $age < 18;
+            {{-- ── Zwei-Spalten-Grid: Import + Export ──────────────── --}}
+            <div class="grid md:grid-cols-2 gap-6">
 
-        if ($needsSupervision && !$request->boolean('supervision_confirmed')) {
-            throw ValidationException::withMessages([
-                'supervision_confirmed' => 'Für Kinder unter 14 Jahren muss bestätigt werden, dass Klettern nur unter Aufsicht erfolgt.',
-            ]);
-        }
+                {{-- Mitglieder CSV-Import --}}
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-1">📥 Mitglieder importieren</h3>
+                    <p class="mt-1 text-xs text-gray-500">
+                        CSV-Datei mit Spalten:
+                        <code class="font-mono">Mitgliedsnummer; Nachname; Vorname; Email; Status; Betrag offen; Geburtsdatum</code>
+                    </p>
+                    <form action="{{ route('admin.importMembers') }}" method="POST" enctype="multipart/form-data" class="space-y-3">
+                        @csrf
+                        <div>
+                            <label class="block text-sm font-medium text-gray-600 mb-1">CSV-Datei wählen</label>
+                            <input type="file" name="members_csv" accept=".csv,.txt"
+                                class="block w-full text-sm text-gray-500
+                                       file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0
+                                       file:text-sm file:font-semibold file:bg-teal-50 file:text-teal-700
+                                       hover:file:bg-teal-100 border border-gray-200 rounded-lg p-1">
+                            @error('members_csv')
+                                <p class="text-red-500 text-xs mt-1">{{ $message }}</p>
+                            @enderror
+                        </div>
+                        <button type="submit"
+                            class="w-full bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold py-2 px-4 rounded-lg transition">
+                            Importieren
+                        </button>
+                    </form>
+                </div>
 
-        // Mitglieds-Verifikation gegen Mitgliederliste
-        $member = null;
-        if ($validated['member_type'] === 'member') {
-            $member = DB::table('members')
-                ->where('member_number', $validated['member_number'])
-                ->first();
+                {{-- Check-ins CSV-Export --}}
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-1">📤 Check-ins exportieren</h3>
+                    <p class="text-sm text-gray-400 mb-4">
+                        Exportiert alle Check-ins im gewählten Zeitraum als CSV (Excel-kompatibel, UTF-8 BOM, Semikolon-getrennt).
+                    </p>
+                    <form action="{{ route('admin.exportCheckins') }}" method="GET" class="space-y-3">
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-600 mb-1">Von</label>
+                                <input type="date" name="from" value="{{ now()->subDays(30)->toDateString() }}"
+                                    class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-400 focus:outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-600 mb-1">Bis</label>
+                                <input type="date" name="to" value="{{ now()->toDateString() }}"
+                                    class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-400 focus:outline-none">
+                            </div>
+                        </div>
+                        <button type="submit"
+                            class="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold py-2 px-4 rounded-lg transition">
+                            CSV herunterladen
+                        </button>
+                    </form>
+                </div>
+            </div>
 
-            if ($member) {
-                $lastNameInput = strtolower(trim($validated['last_name']));
-                $lastNameCsv   = strtolower(trim($member->last_name ?? ''));
+            {{-- ── Registrierungen Tabelle ─────────────────────────── --}}
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                    <h3 class="text-lg font-semibold text-gray-700">👥 Alle Registrierungen</h3>
+                    <span class="text-sm text-gray-400">{{ $registrations->total() }} gesamt</span>
+                </div>
 
-                // ✅ NEU: Geburtsdatum zusätzlich abgleichen
-                $birthInput = Carbon::parse($validated['birth_date'])->toDateString();
-                $birthCsv   = $member->birth_date
-                    ? Carbon::parse($member->birth_date)->toDateString()
-                    : null;
+                {{-- Desktop-Tabelle --}}
+                <div class="hidden md:block overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-100 text-sm">
+                        <thead class="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
+                            <tr>
+                                <th class="px-4 py-3 text-left">Name</th>
+                                <th class="px-4 py-3 text-left">Typ</th>
+                                <th class="px-4 py-3 text-left">Mitgliedsnr.</th>
+                                <th class="px-4 py-3 text-left">Status</th>
+                                <th class="px-4 py-3 text-left">Check-ins</th>
+                                <th class="px-4 py-3 text-left">Registriert am</th>
+                                <th class="px-4 py-3 text-left">Aktion</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-50">
+                            @forelse ($registrations as $reg)
+                                <tr class="hover:bg-gray-50 transition">
+                                    <td class="px-4 py-3 font-medium text-gray-800">
+                                        {{ $reg->first_name }} {{ $reg->last_name }}
+                                        @if ($reg->birth_date)
+                                            <div class="text-xs text-gray-400">{{ $reg->birth_date?->format('d.m.Y') ?? '—' }}</div>
+                                        @endif
+                                    </td>
+                                    <td class="px-4 py-3">
+                                        @if ($reg->member_type === 'member')
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Mitglied</span>
+                                        @else
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">Gast</span>
+                                        @endif
+                                    </td>
+                                    <td class="px-4 py-3 text-gray-500">{{ $reg->member_number ?? '–' }}</td>
+                                    <td class="px-4 py-3">
+                                        @php
+                                            $colors = [
+                                                'green'  => 'bg-green-100 text-green-700',
+                                                'blue'   => 'bg-blue-100 text-blue-700',
+                                                'orange' => 'bg-orange-100 text-orange-700',
+                                                'red'    => 'bg-red-100 text-red-700',
+                                            ];
+                                            $cls = $colors[$reg->access_status] ?? 'bg-gray-100 text-gray-600';
+                                        @endphp
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {{ $cls }}">
+                                            {{ $reg->access_status }}
+                                        </span>
+                                    </td>
+                                    <td class="px-4 py-3 text-gray-600 tabular-nums">{{ $reg->checkins_count ?? $reg->checkins->count() }}</td>
+                                    <td class="px-4 py-3 text-gray-400 text-xs">{{ $reg->created_at->format('d.m.Y H:i') }}</td>
+                                    <td class="px-4 py-3">
+                                        <form action="{{ route('admin.registrations.destroy', $reg) }}" method="POST"
+                                              onsubmit="return confirm('Registrierung von {{ addslashes($reg->first_name . ' ' . $reg->last_name) }} wirklich löschen? Alle Check-ins werden mitgelöscht.')">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit"
+                                                class="text-xs text-red-500 hover:text-red-700 hover:underline transition">
+                                                Löschen
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="7" class="px-4 py-10 text-center text-gray-400">
+                                        Noch keine Registrierungen vorhanden.
+                                    </td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
 
-                if ($lastNameInput !== $lastNameCsv || $birthInput !== $birthCsv) {
-                    throw ValidationException::withMessages([
-                        'member_number' => 'Die Mitgliedsnummer stimmt nicht mit den angegebenen Daten (Nachname + Geburtsdatum) überein. Bitte prüfen!',
-                    ]);
-                }
-            }
-        }
+                {{-- Mobile Cards --}}
+                <div class="md:hidden divide-y divide-gray-100">
+                    @forelse ($registrations as $reg)
+                        <div class="px-4 py-4 flex items-start justify-between gap-3">
+                            <div class="flex-1 min-w-0">
+                                <div class="font-semibold text-gray-800 truncate">{{ $reg->first_name }} {{ $reg->last_name }}</div>
+                                <div class="text-xs text-gray-400 mt-0.5">
+                                    {{ $reg->member_type === 'member' ? 'Mitglied' : 'Gast' }}
+                                    @if ($reg->member_number) · {{ $reg->member_number }} @endif
+                                    · {{ $reg->checkins->count() }} Check-ins
+                                </div>
+                                @php $colors = ['green'=>'text-green-600','blue'=>'text-blue-500','orange'=>'text-orange-500','red'=>'text-red-500']; @endphp
+                                <div class="text-xs font-medium mt-1 {{ $colors[$reg->access_status] ?? 'text-gray-500' }}">
+                                    ● {{ $reg->access_status }}
+                                </div>
+                            </div>
+                            <form action="{{ route('admin.registrations.destroy', $reg) }}" method="POST"
+                                  onsubmit="return confirm('Wirklich löschen?')">
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit" class="text-xs text-red-400 hover:text-red-600 shrink-0">🗑️</button>
+                            </form>
+                        </div>
+                    @empty
+                        <div class="px-4 py-10 text-center text-gray-400">Keine Registrierungen.</div>
+                    @endforelse
+                </div>
 
-        // Duplikat-Suche
-        $query = Registration::query();
-        if ($validated['member_type'] === 'member' && !empty($validated['member_number'])) {
-            $query->where('member_number', $validated['member_number']);
-        } else {
-            $query->whereRaw('LOWER(last_name) = ?', [strtolower(trim($validated['last_name']))])
-                  ->where('birth_date', $validated['birth_date']);
-        }
-        $existingReg = $query->first();
+                {{-- Pagination --}}
+                @if ($registrations->hasPages())
+                    <div class="px-6 py-4 border-t border-gray-100">
+                        {{ $registrations->links() }}
+                    </div>
+                @endif
+            </div>
 
-        // FIX 1: Gast-Upgrade nach Name/Birthdate suchen, falls Mitglied kein Treffer
-        if (!$existingReg && $validated['member_type'] === 'member') {
-            $existingReg = Registration::whereRaw('LOWER(last_name) = ?', [strtolower(trim($validated['last_name']))])
-                ->where('birth_date', $validated['birth_date'])
-                ->where('member_type', 'guest')
-                ->first();
-        }
+        </div>
+    </main>
 
-        // Zugangsstatus bestimmen
-        $accessStatus = 'red';
-        $accessReason = 'Unbekannt';
-        $paymentStatus = 'paid';
+    {{-- Chart.js --}}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script>
+        const labels = @json($labels);
+        const values = @json($values);
 
-        if ($validated['member_type'] === 'guest') {
-            $validated['member_number'] = null;
-            if (!$existingReg) {
-                $accessStatus = 'blue';
-                $accessReason = 'Schnupperklettern';
-            } else {
-                $accessStatus = 'orange';
-                $accessReason = 'Kulanz: ' . $existingReg->manualexceptionreason;
-            }
-        } elseif ($validated['member_type'] === 'member') {
-            if (!$member) {
-                $accessStatus  = 'orange';
-                $accessReason  = 'Mitglied noch unbestätigt / nicht in Datenbank';
-                $paymentStatus = 'overdue';
-            } elseif (($member->membershipstatus ?? null) !== 'active') {
-                $accessStatus  = 'red';
-                $accessReason  = 'Mitgliedschaft inaktiv';
-                $paymentStatus = 'overdue';
-            } elseif (($member->payment_status ?? null) === 'open') {
-                $accessStatus  = 'orange';
-                $accessReason  = 'Beitrag offen';
-                $paymentStatus = 'overdue';
-            } else {
-                $accessStatus = 'green';
-                $accessReason = 'Mitgliedschaft aktiv & bezahlt';
-            }
-        }
-
-        // Aufsicht-Logik
-        if ($needsSupervision) {
-            if ($validated['member_type'] === 'guest') {
-                $accessReason .= ' · Unter 14 – Aufsicht erforderlich';
-            } else {
-                if ($request->boolean('supervision_confirmed')) {
-                    $accessStatus = 'green';
-                    $accessReason = 'Unter 14 – Aufsicht erforderlich';
-                } else {
-                    $accessStatus = 'orange';
-                    $accessReason = 'Unter 14 – Aufsicht erforderlich';
-                }
-            }
-        }
-
-        if ($needsParentConsent) {
-            if ($validated['member_type'] === 'guest') {
-                $accessReason .= ' · Jugendlicher (14–17)';
-            } else {
-                $accessStatus = 'green';
-                $accessReason = 'Jugendlicher (14–17)';
-            }
-        }
-
-        // GAST-BLOCK / Upgrade-Logik
-        if ($existingReg) {
-            // FIX 2: Upgrade-Logik Gast → Mitglied erlauben
-            $isUpgrade = $existingReg->member_type === 'guest' && $validated['member_type'] === 'member';
-
-            if (!$isUpgrade) {
-                if ($existingReg->member_type === 'guest') {
-                    if (($existingReg->trial_visits_count ?? 0) >= 2) {
-                        throw ValidationException::withMessages([
-                            'first_name' => 'Du hast das Schnupper-Limit bereits vollständig ausgeschöpft. Eine weitere Registrierung als Gast ist nicht möglich.',
-                        ]);
+        new Chart(document.getElementById('auslastungChart'), {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Check-ins',
+                    data: values,
+                    backgroundColor: 'rgba(13, 148, 136, 0.7)',   // teal-600
+                    borderColor:     'rgba(13, 148, 136, 1)',
+                    borderWidth: 1,
+                    borderRadius: 4,
+                    borderSkipped: false,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => ` ${ctx.parsed.y} Check-in${ctx.parsed.y !== 1 ? 's' : ''}`
+                        }
                     }
-                    $hasKulanz = $existingReg->manual_exception_until &&
-                                 $existingReg->manual_exception_until->isFuture();
-                    if (!$hasKulanz) {
-                        throw ValidationException::withMessages([
-                            'first_name' => 'Du bist bereits als Schnuppergast registriert. Ein zweites Mal ist nur nach Absprache mit dem Hallendienst möglich.',
-                        ]);
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: {
+                            font: { size: 11 },
+                            maxRotation: 45,
+                            callback: function(val, index) {
+                                return index % 3 === 0 ? this.getLabelForValue(val) : '';
+                            }
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        ticks: { precision: 0, font: { size: 11 } },
+                        grid: { color: 'rgba(0,0,0,0.05)' }
                     }
-                } else {
-                    return redirect('verify/' . $existingReg->qr_token)
-                        ->with('success', 'Du warst bereits registriert! Hier ist dein aktueller Status.');
                 }
             }
-
-            // FIX 3: member_type & member_number mitschreiben
-            $existingReg->update([
-                'member_type'              => $validated['member_type'],
-                'member_number'            => $validated['member_number'] ?? null,
-                'waiver_accepted'          => true,
-                'birth_date'               => $validated['birth_date'],
-                'email'                   => $validated['email'] ?? null,
-                'access_status'            => $accessStatus,
-                'access_reason'            => $accessReason,
-                'needs_supervision'        => $needsSupervision,
-                'needs_parent_consent'      => $needsParentConsent,
-                'parent_consent_received'   => $needsParentConsent ? $existingReg->parent_consent_received : false,
-                'parent_consent_received_at' => $needsParentConsent ? $existingReg->parent_consent_received_at : null,
-                'supervision_confirmed'    => $needsSupervision
-                    ? $request->boolean('supervision_confirmed')
-                    : false,
-            ]);
-            $registration = $existingReg;
-        } else {
-            $registration = Registration::create([
-                'first_name'               => $validated['first_name'],
-                'last_name'                => $validated['last_name'],
-                'birth_date'               => $validated['birth_date'],
-                'email'                   => $validated['email'] ?? null,
-                'member_type'              => $validated['member_type'],
-                'member_number'            => $validated['member_number'] ?? null,
-                'waiver_accepted'          => true,
-                'waiver_version'           => 'v1',
-                'payment_status'           => $paymentStatus,
-                'access_status'            => $accessStatus,
-                'access_reason'            => $accessReason,
-                'trial_visits_count'        => 0,
-                'needs_supervision'        => $needsSupervision,
-                'needs_parent_consent'      => $needsParentConsent,
-                'parent_consent_received'   => false,
-                'parent_consent_received_at' => null,
-                'supervision_confirmed'    => $needsSupervision
-                    ? $request->boolean('supervision_confirmed')
-                    : false,
-                'qr_token'                 => (string) Str::uuid(),
-            ]);
-        }
-
-        return redirect('verify/' . $registration->qr_token)
-            ->with('success', 'Registrierung erfolgreich!');
-    }
-
-    public function verify(string $token)
-    {
-        $registration = Registration::withCurrentCheckin()
-            ->where('qr_token', $token)
-            ->firstOrFail();
-
-        return view('verify', compact('registration'));
-    }
-
-    public function checkin(Request $request, string $token)
-    {
-        $registration = Registration::withCurrentCheckin()
-            ->where('qr_token', $token)
-            ->first();
-
-        if (!$registration) {
-            $msg = 'QR-Code ungültig oder abgelaufen.';
-            return $request->expectsJson()
-                ? response()->json(['success' => false, 'message' => $msg], 404)
-                : abort(404, $msg);
-        }
-
-        $hasActiveKulanz = $registration->manual_exception_until &&
-                           $registration->manual_exception_until->isFuture();
-        $needsKulanz = in_array($registration->access_status, ['red', 'orange']) && !$hasActiveKulanz;
-
-        if ($needsKulanz) {
-            $statusText = strtoupper($registration->access_status);
-            $message    = "Check-in blockiert! Status ist {$statusText}. Kulanz erforderlich: "
-                        . ($registration->access_reason ?? 'Unbekannt') . '.';
-            if ($request->expectsJson()) {
-                return response()->json(['success' => false, 'message' => $message], 403);
-            }
-            return redirect()->route('verify', $registration->qr_token)->withErrors($message);
-        }
-
-        if ($registration->currentCheckin) {
-            $message = $registration->first_name . ' ' . $registration->last_name
-                . ' ist bereits seit '
-                . $registration->currentCheckin->checked_in_at->format('H:i')
-                . ' Uhr eingecheckt.';
-            if ($request->expectsJson()) {
-                return response()->json(['success' => false, 'message' => $message], 422);
-            }
-            return redirect()->route('verify', $registration->qr_token)->withErrors($message);
-        }
-
-        // Nur green/blue dürfen direkt einchecken
-        if (!in_array($registration->access_status, ['green', 'blue'])) {
-            $message = $registration->access_status === 'red'
-                ? 'Kein Zutritt erlaubt.'
-                : 'Zutritt erfordert manuelle Freigabe durch den Hallendienst.';
-            if ($request->expectsJson()) {
-                return response()->json(['success' => false, 'message' => $message], 403);
-            }
-            return redirect()->back()->withErrors('Check-in verweigert: ' . $message);
-        }
-
-        Checkin::create([
-            'registration_id' => $registration->id,
-            'checked_in_at'     => now(),
-        ]);
-        $registration->increment('trial_visits_count');
-
-        $message = $registration->first_name . ' ' . $registration->last_name
-                 . ' wurde erfolgreich eingecheckt.';
-
-        if ($request->expectsJson()) {
-            return response()->json(['success' => true, 'message' => $message]);
-        }
-        return redirect()->route('verify', $registration->qr_token)->with('success', $message);
-    }
-}
+        });
+    </script>
+</body>
+</html>
 ````
 
 ## File: routes/web.php
@@ -8813,4 +8473,354 @@ CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
 
 </body>
 </html>
+````
+
+## File: app/Http/Controllers/RegistrationController.php
+````php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Member;
+use App\Models\Checkin;
+use App\Models\Registration;
+use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
+
+class RegistrationController extends Controller
+{
+    public function create(Request $request)
+    {
+        $request->session()->put('register_form_started_at', now()->timestamp);
+        return view('register');
+    }
+
+    public function store(Request $request)
+    {
+        // Honeypot-Spam-Schutz
+        if (filled($request->input('website')) || filled($request->input('fax_number'))) {
+            \Log::warning('Spam blockiert: Honeypot-Feld ausgefüllt', [
+                'ip' => $request->ip(),
+                'ua' => $request->userAgent(),
+            ]);
+            throw ValidationException::withMessages([
+                'first_name' => 'Die Registrierung konnte nicht verarbeitet werden. Bitte versuche es erneut.',
+            ]);
+        }
+
+        $formStartedAt = (int) $request->session()->get('register_form_started_at', 0);
+        $secondsTaken  = now()->timestamp - $formStartedAt;
+        if ($formStartedAt > 0 && $secondsTaken < 3) {
+            \Log::warning('Spam blockiert: Formular zu schnell abgesendet', [
+                'ip'           => $request->ip(),
+                'ua'           => $request->userAgent(),
+                'secondstaken' => $secondsTaken,
+            ]);
+            throw ValidationException::withMessages([
+                'first_name' => 'Die Registrierung konnte nicht verarbeitet werden. Bitte versuche es erneut.',
+            ]);
+        }
+
+        $validated = $request->validate([
+            'first_name'          => 'required|string|max:255',
+            'last_name'           => 'required|string|max:255',
+            'birth_date'          => 'required|date|after_or_equal:1900-01-01|before_or_equal:today',
+            'email'              => 'nullable|email|max:255',
+            'member_type'         => 'required|in:member,guest',
+            'member_number'       => [
+                'required_if:member_type,member',
+                'nullable',
+                'string',
+                // ✅ NEU: Format XX-XXXXX erzwingen
+                'regex:/^\d{2}-\d{5}$/',
+            ],
+            'waiver_accepted'     => 'required|accepted',
+            'rules_accepted'     => 'required|accepted',
+            'supervision_confirmed' => 'nullable|boolean',
+            // Honeypot-Felder
+            'hp_time'             => 'required|integer',
+            'website'            => 'nullable|max:0',
+            'fax_number'          => 'nullable|max:0',
+        ], [
+            'birth_date.required'   => 'Das Geburtsdatum ist erforderlich, um doppelte Registrierungen zu vermeiden.',
+            // ✅ NEU: Fehlermeldung für Format-Validierung
+            'member_number.regex'   => 'Die Mitgliedsnummer muss im Format XX-XXXXX eingegeben werden (z.B. 12-34567).',
+        ]);
+
+        // Freitextfelder bereinigen
+        $validated['first_name']    = strip_tags($validated['first_name']);
+        $validated['last_name']     = strip_tags($validated['last_name']);
+        $validated['member_number'] = isset($validated['member_number'])
+            ? strip_tags($validated['member_number'])
+            : null;
+
+        $birthDate       = Carbon::parse($validated['birth_date']);
+        $age             = $birthDate->age;
+        $needsSupervision   = $age < 14;
+        $needsParentConsent = $age >= 14 && $age < 18;
+
+        if ($needsSupervision && !$request->boolean('supervision_confirmed')) {
+            throw ValidationException::withMessages([
+                'supervision_confirmed' => 'Für Kinder unter 14 Jahren muss bestätigt werden, dass Klettern nur unter Aufsicht erfolgt.',
+            ]);
+        }
+
+        // Mitglieds-Verifikation gegen Mitgliederliste
+        $member = null;
+        if ($validated['member_type'] === 'member') {
+            $member = DB::table('members')
+                ->where('member_number', $validated['member_number'])
+                ->first();
+        
+            $lastNameInput = strtolower(trim($validated['last_name']));
+            $birthInput    = Carbon::parse($validated['birth_date'])->toDateString();
+        
+            if ($member) {
+                $lastNameDb = strtolower(trim($member->last_name ?? ''));
+                $birthDb    = $member->birth_date
+                    ? Carbon::parse($member->birth_date)->toDateString()
+                    : null;
+        
+                if ($lastNameInput !== $lastNameDb || $birthInput !== $birthDb) {
+                    throw ValidationException::withMessages([
+                        'member_number' => 'Die Mitgliedsnummer stimmt nicht mit den angegebenen Daten (Nachname + Geburtsdatum) überein. Bitte prüfen!',
+                    ]);
+                }
+            } else {
+                $nameBirthMatch = DB::table('members')
+                    ->whereRaw('LOWER(last_name) = ?', [$lastNameInput])
+                    ->whereDate('birth_date', $birthInput)
+                    ->exists();
+        
+                if ($nameBirthMatch) {
+                    throw ValidationException::withMessages([
+                        'member_number' => 'Die Mitgliedsnummer stimmt nicht mit den angegebenen Daten (Nachname + Geburtsdatum) überein. Bitte prüfen!',
+                    ]);
+                }
+            }
+        }
+
+        // Duplikat-Suche
+        $query = Registration::query();
+        if ($validated['member_type'] === 'member' && !empty($validated['member_number'])) {
+            $query->where('member_number', $validated['member_number']);
+        } else {
+            $query->whereRaw('LOWER(last_name) = ?', [strtolower(trim($validated['last_name']))])
+                  ->where('birth_date', $validated['birth_date']);
+        }
+        $existingReg = $query->first();
+
+        // FIX 1: Gast-Upgrade nach Name/Birthdate suchen, falls Mitglied kein Treffer
+        if (!$existingReg && $validated['member_type'] === 'member') {
+            $existingReg = Registration::whereRaw('LOWER(last_name) = ?', [strtolower(trim($validated['last_name']))])
+                ->where('birth_date', $validated['birth_date'])
+                ->where('member_type', 'guest')
+                ->first();
+        }
+
+        // Zugangsstatus bestimmen
+        $accessStatus = 'red';
+        $accessReason = 'Unbekannt';
+        $paymentStatus = 'paid';
+
+        if ($validated['member_type'] === 'guest') {
+            $validated['member_number'] = null;
+            if (!$existingReg) {
+                $accessStatus = 'blue';
+                $accessReason = 'Schnupperklettern';
+            } else {
+                $accessStatus = 'orange';
+                $accessReason = 'Kulanz: ' . $existingReg->manual_exception_reason;
+            }
+        } elseif ($validated['member_type'] === 'member') {
+            if (!$member) {
+                $accessStatus  = 'orange';
+                $accessReason  = 'Mitglied noch unbestätigt / nicht in Datenbank';
+                $paymentStatus = 'overdue';
+            } elseif (($member->membership_status ?? null) !== 'active') {
+                $accessStatus  = 'red';
+                $accessReason  = 'Mitgliedschaft inaktiv';
+                $paymentStatus = 'overdue';
+            } elseif (($member->payment_status ?? null) === 'open') {
+                $accessStatus  = 'orange';
+                $accessReason  = 'Beitrag offen';
+                $paymentStatus = 'overdue';
+            } else {
+                $accessStatus = 'green';
+                $accessReason = 'Mitgliedschaft aktiv & bezahlt';
+            }
+        }
+
+        // Aufsicht-Logik
+        if ($needsSupervision) {
+            if ($validated['member_type'] === 'guest') {
+                $accessReason .= ' · Unter 14 – Aufsicht erforderlich';
+            } else {
+                if ($request->boolean('supervision_confirmed')) {
+                    $accessStatus = 'green';
+                    $accessReason = 'Unter 14 – Aufsicht erforderlich';
+                } else {
+                    $accessStatus = 'orange';
+                    $accessReason = 'Unter 14 – Aufsicht erforderlich';
+                }
+            }
+        }
+
+        if ($needsParentConsent) {
+            if ($validated['member_type'] === 'guest') {
+                $accessReason .= ' · Jugendlicher (14–17)';
+            } else {
+                $accessStatus = 'green';
+                $accessReason = 'Jugendlicher (14–17)';
+            }
+        }
+
+        // GAST-BLOCK / Upgrade-Logik
+        if ($existingReg) {
+            // FIX 2: Upgrade-Logik Gast → Mitglied erlauben
+            $isUpgrade = $existingReg->member_type === 'guest' && $validated['member_type'] === 'member';
+
+            if (!$isUpgrade) {
+                if ($existingReg->member_type === 'guest') {
+                    if (($existingReg->trial_visits_count ?? 0) >= 2) {
+                        throw ValidationException::withMessages([
+                            'first_name' => 'Du hast das Schnupper-Limit bereits vollständig ausgeschöpft. Eine weitere Registrierung als Gast ist nicht möglich.',
+                        ]);
+                    }
+                    $hasKulanz = $existingReg->manual_exception_until &&
+                                 $existingReg->manual_exception_until->isFuture();
+                    if (!$hasKulanz) {
+                        throw ValidationException::withMessages([
+                            'first_name' => 'Du bist bereits als Schnuppergast registriert. Ein zweites Mal ist nur nach Absprache mit dem Hallendienst möglich.',
+                        ]);
+                    }
+                } else {
+                    return redirect('verify/' . $existingReg->qr_token)
+                        ->with('success', 'Du warst bereits registriert! Hier ist dein aktueller Status.');
+                }
+            }
+
+            // FIX 3: member_type & member_number mitschreiben
+            $existingReg->update([
+                'member_type'              => $validated['member_type'],
+                'member_number'            => $validated['member_number'] ?? null,
+                'waiver_accepted'          => true,
+                'birth_date'               => $validated['birth_date'],
+                'email'                   => $validated['email'] ?? null,
+                'access_status'            => $accessStatus,
+                'access_reason'            => $accessReason,
+                'needs_supervision'        => $needsSupervision,
+                'needs_parent_consent'      => $needsParentConsent,
+                'parent_consent_received'   => $needsParentConsent ? $existingReg->parent_consent_received : false,
+                'parent_consent_received_at' => $needsParentConsent ? $existingReg->parent_consent_received_at : null,
+                'supervision_confirmed'    => $needsSupervision
+                    ? $request->boolean('supervision_confirmed')
+                    : false,
+            ]);
+            $registration = $existingReg;
+        } else {
+            $registration = Registration::create([
+                'first_name'               => $validated['first_name'],
+                'last_name'                => $validated['last_name'],
+                'birth_date'               => $validated['birth_date'],
+                'email'                   => $validated['email'] ?? null,
+                'member_type'              => $validated['member_type'],
+                'member_number'            => $validated['member_number'] ?? null,
+                'waiver_accepted'          => true,
+                'waiver_version'           => 'v1',
+                'payment_status'           => $paymentStatus,
+                'access_status'            => $accessStatus,
+                'access_reason'            => $accessReason,
+                'trial_visits_count'        => 0,
+                'needs_supervision'        => $needsSupervision,
+                'needs_parent_consent'      => $needsParentConsent,
+                'parent_consent_received'   => false,
+                'parent_consent_received_at' => null,
+                'supervision_confirmed'    => $needsSupervision
+                    ? $request->boolean('supervision_confirmed')
+                    : false,
+                'qr_token'                 => (string) Str::uuid(),
+            ]);
+        }
+
+        return redirect('verify/' . $registration->qr_token)
+            ->with('success', 'Registrierung erfolgreich!');
+    }
+
+    public function verify(string $token)
+    {
+        $registration = Registration::with('currentCheckin')
+            ->where('qr_token', $token)
+            ->firstOrFail();
+
+        return view('verify', compact('registration'));
+    }
+
+    public function checkin(Request $request, string $token)
+    {
+        $registration = Registration::with('currentCheckin')
+            ->where('qr_token', $token)
+            ->first();
+
+        if (!$registration) {
+            $msg = 'QR-Code ungültig oder abgelaufen.';
+            return $request->expectsJson()
+                ? response()->json(['success' => false, 'message' => $msg], 404)
+                : abort(404, $msg);
+        }
+
+        $hasActiveKulanz = $registration->manual_exception_until &&
+                           $registration->manual_exception_until->isFuture();
+        $needsKulanz = in_array($registration->access_status, ['red', 'orange']) && !$hasActiveKulanz;
+
+        if ($needsKulanz) {
+            $statusText = strtoupper($registration->access_status);
+            $message    = "Check-in blockiert! Status ist {$statusText}. Kulanz erforderlich: "
+                        . ($registration->access_reason ?? 'Unbekannt') . '.';
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 403);
+            }
+            return redirect()->route('verify', $registration->qr_token)->withErrors($message);
+        }
+
+        if ($registration->currentCheckin) {
+            $message = $registration->first_name . ' ' . $registration->last_name
+                . ' ist bereits seit '
+                . $registration->currentCheckin->checked_in_at->format('H:i')
+                . ' Uhr eingecheckt.';
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 422);
+            }
+            return redirect()->route('verify', $registration->qr_token)->withErrors($message);
+        }
+
+        // Nur green/blue dürfen direkt einchecken
+        if (!in_array($registration->access_status, ['green', 'blue'])) {
+            $message = $registration->access_status === 'red'
+                ? 'Kein Zutritt erlaubt.'
+                : 'Zutritt erfordert manuelle Freigabe durch den Hallendienst.';
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 403);
+            }
+            return redirect()->back()->withErrors('Check-in verweigert: ' . $message);
+        }
+
+        Checkin::create([
+            'registration_id' => $registration->id,
+            'checked_in_at'     => now(),
+        ]);
+        $registration->increment('trial_visits_count');
+
+        $message = $registration->first_name . ' ' . $registration->last_name
+                 . ' wurde erfolgreich eingecheckt.';
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => $message]);
+        }
+        return redirect()->route('verify', $registration->qr_token)->with('success', $message);
+    }
+}
 ````

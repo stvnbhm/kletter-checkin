@@ -233,6 +233,7 @@ class RegistrationController extends Controller
                 'email'                   => $validated['email'] ?? null,
                 'access_status'            => $accessStatus,
                 'access_reason'            => $accessReason,
+                'payment_status'            => $paymentStatus,
                 'needs_supervision'        => $needsSupervision,
                 'needs_parent_consent'      => $needsParentConsent,
                 'parent_consent_received'   => $needsParentConsent ? $existingReg->parent_consent_received : false,

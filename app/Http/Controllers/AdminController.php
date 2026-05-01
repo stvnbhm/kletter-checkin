@@ -152,32 +152,33 @@ class AdminController extends Controller
                     ]
                 );
                 
-                // ↓ NEU: Registrierungen synchronisieren
-                if ($membershipStatus === 'active' && $paymentStatus === 'paid') {
-                Registration::where('member_number', $memberNumber)
-                    ->where('access_status', 'red')
-                    ->where(function ($q) {
-                        $q->where('access_reason', 'like', '%inaktiv%')
-                          ->orWhere('access_reason', 'like', '%Schnupperlimit%');
-                    })
-                    ->update([
-                        'access_status' => 'green',
-                        'access_reason' => 'Mitgliedschaft aktiv bezahlt',
+                // Registrierungen synchronisieren
+                Registration::where('member_number', $memberNumber)->update([
+                    'payment_status' => $paymentStatus,
+                ]);
+                
+                if ($membershipStatus === 'inactive') {
+                    Registration::where('member_number', $memberNumber)->update([
+                        'access_status' => 'red',
+                        'access_reason' => 'Mitgliedschaft inaktiv',
                     ]);
-                } elseif ($membershipStatus === 'active' && $paymentStatus === 'open') {
+                } elseif ($paymentStatus === 'open') {
                     Registration::where('member_number', $memberNumber)
-                        ->whereIn('access_status', ['red', 'green'])
-                        ->where('access_reason', 'like', '%inaktiv%')
+                        ->where('access_status', 'green')
                         ->update([
                             'access_status' => 'orange',
                             'access_reason' => 'Beitrag offen',
                         ]);
-                } elseif ($membershipStatus === 'inactive') {
+                } else {
                     Registration::where('member_number', $memberNumber)
-                        ->where('access_status', '!=', 'red')
+                        ->whereIn('access_status', ['red', 'orange'])
+                        ->where(function ($q) {
+                            $q->where('access_reason', 'like', '%Beitrag offen%')
+                              ->orWhere('access_reason', 'like', '%inaktiv%');
+                        })
                         ->update([
-                            'access_status' => 'red',
-                            'access_reason' => 'Mitgliedschaft inaktiv',
+                            'access_status' => 'green',
+                            'access_reason' => 'Mitgliedschaft aktiv & bezahlt',
                         ]);
                 }
     
