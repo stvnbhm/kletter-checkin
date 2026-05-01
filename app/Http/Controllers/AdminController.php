@@ -124,7 +124,7 @@ class AdminController extends Controller
                 $betragOffen = (float) str_replace(',', '.', trim((string) ($data['Betrag offen'] ?? '0')));
                 $paymentStatus = $betragOffen > 0 ? 'open' : 'paid';
                 
-                $birthDate = $this->parseCsvDate($data['GebDatum'] ?? null);
+                $birthDate = $this->parseCsvDate($data['Geburtsdatum'] ?? null);
                 $exitDate = $this->parseCsvDate($data['Austrittsdatum'] ?? null);
                 
                 // NEU: Status-Spalte direkt auslesen
