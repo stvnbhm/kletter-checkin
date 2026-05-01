@@ -38,7 +38,7 @@
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
                 <h2 class="text-xl font-semibold text-gray-800">Staff-Ansicht</h2>
                 <div class="flex flex-wrap items-center gap-2">
-            
+
                     {{-- Alle auschecken --}}
                     <form method="POST" action="{{ route('staff.checkout-all') }}"
                           onsubmit="return confirm('Alle aktuell eingecheckten Personen auschecken?')">
@@ -51,7 +51,7 @@
                             Alle auschecken
                         </button>
                     </form>
-            
+
                     {{-- QR-Scanner --}}
                     <button id="qr-toggle-btn" onclick="toggleScanner()"
                         class="inline-flex items-center gap-2 bg-indigo-600 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-indigo-700 transition">
@@ -60,7 +60,7 @@
                         </svg>
                         QR-Code scannen
                     </button>
-            
+
                 </div>
             </div>
 
@@ -161,16 +161,20 @@
                                            && $registration->manual_exception_until->isFuture();
                         $visits          = $registration->trial_visits_count ?? 0;
 
-                        $isTrialMaxReached   = $registration->member_type === 'guest' && $visits >= 3;
-                        $isTrialLimitReached = $registration->member_type === 'guest'
-                                               && $visits >= 1 && $visits < 3
-                                               && !$hasActiveKulanz;
+                        $isTrialMaxReached        = $registration->member_type === 'guest' && $visits >= 3;
+                        $isUnverifiedMemberBlocked = $registration->member_type === 'member'
+                                                     && $registration->member === null
+                                                     && $registration->access_status === 'red';
+                        $isTrialLimitReached      = $registration->member_type === 'guest'
+                                                     && $visits >= 1 && $visits < 3
+                                                     && !$hasActiveKulanz;
 
                         $needsKulanz = (in_array($registration->access_status, ['red', 'orange']) && !$hasActiveKulanz)
                                        || $isTrialLimitReached;
 
-                        // Check-in ist definitiv gesperrt – kein Button, kein Kulanz-Formular möglich
+                        // Definitiv gesperrt: kein Button, kein Kulanz-Formular
                         $isHardBlocked = $isTrialMaxReached
+                                         || $isUnverifiedMemberBlocked
                                          || ($registration->access_status === 'red' && !$hasActiveKulanz);
 
                         $kulanzHint = match (true) {
@@ -218,14 +222,21 @@
                                     @endif
                                 </div>
                             </div>
+                            {{-- ZUTRITT-BADGE: eingecheckt → immer grün ✅ --}}
                             <div class="flex flex-col items-end gap-1 shrink-0">
-                                <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-bold {{ $accessStyle }}">
-                                    {{ $accessText }}
-                                </span>
+                                @if ($currentCheckin)
+                                    <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-bold bg-green-100 text-green-800">
+                                        ✅ Eingecheckt
+                                    </span>
+                                @else
+                                    <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-bold {{ $accessStyle }}">
+                                        {{ $accessText }}
+                                    </span>
+                                @endif
                             </div>
                         </div>
 
-                        {{-- Zusatzinfos: 14–17 → Formular; alle anderen → access_reason --}}
+                        {{-- Zusatzinfos --}}
                         @if ($registration->needs_parent_consent)
                             <div class="text-xs text-gray-600 space-y-1 border-t border-gray-100 pt-2">
                                 <div>Klettert alleine? – dann Formular nötig
@@ -244,7 +255,7 @@
                                     @endif
                                 </div>
                             </div>
-                        @elseif ($registration->access_reason)
+                        @elseif (!$currentCheckin && $registration->access_reason)
                             <div class="text-xs text-gray-500 border-t border-gray-100 pt-2">
                                 {{ $registration->access_reason }}
                             </div>
@@ -256,9 +267,8 @@
                                     Eingecheckt {{ $currentCheckin->checked_in_at->format('H:i') }} Uhr
                                 </span>
                             @elseif ($isHardBlocked)
-                                {{-- Definitiv gesperrt: kein Button, nur Hinweis --}}
                                 <span class="text-xs font-semibold text-red-600">
-                                    🚫 {{ $isTrialMaxReached ? 'Schnupperlimit ausgeschöpft (3/3)' : 'Kein Zutritt möglich' }}
+                                    🚫 {{ $isTrialMaxReached ? 'Schnupperlimit ausgeschöpft (3/3)' : $registration->access_reason }}
                                 </span>
                             @elseif ($needsKulanz)
                                 <form method="POST" action="{{ route('staff.kulanz-checkin', $registration) }}"
@@ -318,16 +328,20 @@
                                                        && $registration->manual_exception_until->isFuture();
                                     $visits          = $registration->trial_visits_count ?? 0;
 
-                                    $isTrialMaxReached   = $registration->member_type === 'guest' && $visits >= 3;
-                                    $isTrialLimitReached = $registration->member_type === 'guest'
-                                                           && $visits >= 1 && $visits < 3
-                                                           && !$hasActiveKulanz;
+                                    $isTrialMaxReached        = $registration->member_type === 'guest' && $visits >= 3;
+                                    $isUnverifiedMemberBlocked = $registration->member_type === 'member'
+                                                                 && $registration->member === null
+                                                                 && $registration->access_status === 'red';
+                                    $isTrialLimitReached      = $registration->member_type === 'guest'
+                                                                 && $visits >= 1 && $visits < 3
+                                                                 && !$hasActiveKulanz;
 
                                     $needsKulanz = (in_array($registration->access_status, ['red', 'orange']) && !$hasActiveKulanz)
                                                    || $isTrialLimitReached;
 
-                                    // Check-in ist definitiv gesperrt – kein Button, kein Kulanz-Formular möglich
+                                    // Definitiv gesperrt: kein Button, kein Kulanz-Formular
                                     $isHardBlocked = $isTrialMaxReached
+                                                     || $isUnverifiedMemberBlocked
                                                      || ($registration->access_status === 'red' && !$hasActiveKulanz);
 
                                     $kulanzHint = match (true) {
@@ -378,10 +392,17 @@
                                         {{ $registration->member_number ?? '—' }}
                                     </td>
 
+                                    {{-- ZUTRITT-SPALTE: eingecheckt → immer grün ✅ --}}
                                     <td class="px-4 py-4 align-top">
-                                        <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-bold {{ $accessStyle }}">
-                                            {{ $accessText }}
-                                        </span>
+                                        @if ($currentCheckin)
+                                            <span class="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold bg-green-100 text-green-800">
+                                                ✅ Eingecheckt
+                                            </span>
+                                        @else
+                                            <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-bold {{ $accessStyle }}">
+                                                {{ $accessText }}
+                                            </span>
+                                        @endif
                                     </td>
 
                                     {{-- ZUSATZINFOS-SPALTE --}}
@@ -405,8 +426,10 @@
                                                     </form>
                                                 @endif
                                             </div>
-                                        @elseif ($registration->access_reason)
+                                        @elseif (!$currentCheckin && $registration->access_reason)
                                             <span class="text-gray-600">{{ $registration->access_reason }}</span>
+                                        @elseif ($currentCheckin)
+                                            <span class="text-gray-300">—</span>
                                         @else
                                             <span class="text-gray-300">—</span>
                                         @endif
@@ -419,9 +442,8 @@
                                                 Eingecheckt {{ $currentCheckin->checked_in_at->format('H:i') }} Uhr
                                             </span>
                                         @elseif ($isHardBlocked)
-                                            {{-- Definitiv gesperrt: kein Button, nur Hinweis --}}
                                             <span class="text-xs font-semibold text-red-600">
-                                                🚫 {{ $isTrialMaxReached ? 'Schnupperlimit ausgeschöpft (3/3)' : 'Kein Zutritt möglich' }}
+                                                🚫 {{ $isTrialMaxReached ? 'Schnupperlimit ausgeschöpft (3/3)' : $registration->access_reason }}
                                             </span>
                                         @elseif ($needsKulanz)
                                             <div class="flex flex-col gap-1.5">
