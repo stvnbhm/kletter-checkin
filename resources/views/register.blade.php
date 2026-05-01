@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>Registrierung | Kletterhalle</title>
+    <title>Registrierung | Kletterdom</title>
 
     <!-- Direkte Vite-Einbindung für sauberes Tailwind und JS -->
     @vite(['resources/css/app.css', 'resources/js/app.js'])
@@ -22,7 +22,7 @@
         
         <div class="sm:mx-auto sm:w-full sm:max-w-3xl text-center mb-6">
             <h2 class="text-3xl font-extrabold text-gray-900">
-                Registrierung Kletterhalle
+                Registrierung Kletterdom
             </h2>
             <p class="mt-2 text-sm text-gray-600">
                 Bitte fülle das Formular aus, um dich für den Hallenbesuch zu registrieren.

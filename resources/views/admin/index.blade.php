@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>Admin | Kletterhalle</title>
+    <title>Admin | Kletterdom</title>
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
@@ -75,8 +75,6 @@
                     <p class="mt-1 text-xs text-gray-500">
                         CSV-Datei mit Spalten:
                         <code class="font-mono">Mitgliedsnummer; Nachname; Vorname; Email; Status; Betrag offen; Geburtsdatum</code>
-                        <br>
-                        Semikolon als Trennzeichen · Datum: TT.MM.JJJJ · Status: <em>aktiv / ausgetreten / gelöscht</em> · Betrag offen: 0 = bezahlt, &gt;0 = offen
                     </p>
                     <form action="{{ route('admin.importMembers') }}" method="POST" enctype="multipart/form-data" class="space-y-3">
                         @csrf
