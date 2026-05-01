@@ -13,6 +13,8 @@ services:
     environment:
       - TZ=Europe/Vienna
     # Kein Volume-Mount! vendor/ würde sonst überschrieben werden.
+    volumes:
+      - ./backups:/var/www/html/storage/backups  # ← NUR dieser Unterordner
 
   nginx:
     image: nginx:alpine
