@@ -207,6 +207,7 @@ tests/
   Pest.php
   TestCase.php
 .editorconfig
+.env alt
 .env.example
 .gitattributes
 .gitignore
@@ -4780,6 +4781,79 @@ indent_size = 2
 indent_size = 4
 ````
 
+## File: .env alt
+````
+APP_NAME=Laravel
+APP_ENV=local
+APP_KEY=base64:MA+co+zJXP13/Ff17ejVQVKefl+ClIFPcEBFJUeB5yE=
+APP_DEBUG=true
+APP_URL=http://127.0.0.1:8080
+ASSET_URL=APP_URL=http://127.0.0.1:8080
+
+APP_TIMEZONE=Europe/Vienna
+APP_LOCALE=en
+APP_FALLBACK_LOCALE=en
+APP_FAKER_LOCALE=en_US
+
+APP_MAINTENANCE_DRIVER=file
+# APP_MAINTENANCE_STORE=database
+
+# PHP_CLI_SERVER_WORKERS=4
+
+BCRYPT_ROUNDS=12
+
+LOG_CHANNEL=stack
+LOG_STACK=single
+LOG_DEPRECATIONS_CHANNEL=null
+LOG_LEVEL=debug
+
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=klettercheckin
+DB_USERNAME=checkinuser
+DB_PASSWORD=deinPasswort
+DB_ROOT_PASSWORD=BeispielPasswort123!
+
+SESSION_DRIVER=file
+SESSION_LIFETIME=120
+SESSION_ENCRYPT=false
+SESSION_PATH=/
+SESSION_DOMAIN=null
+
+BROADCAST_CONNECTION=log
+FILESYSTEM_DISK=local
+QUEUE_CONNECTION=sync
+
+CACHE_DRIVER=file
+CACHE_STORE=file
+# CACHE_PREFIX=
+
+MEMCACHED_HOST=127.0.0.1
+
+REDIS_CLIENT=phpredis
+REDIS_HOST=127.0.0.1
+REDIS_PASSWORD=null
+REDIS_PORT=6379
+
+MAIL_MAILER=log
+MAIL_SCHEME=null
+MAIL_HOST=127.0.0.1
+MAIL_PORT=2525
+MAIL_USERNAME=null
+MAIL_PASSWORD=null
+MAIL_FROM_ADDRESS="hello@example.com"
+MAIL_FROM_NAME="${APP_NAME}"
+
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+AWS_DEFAULT_REGION=us-east-1
+AWS_BUCKET=
+AWS_USE_PATH_STYLE_ENDPOINT=false
+
+VITE_APP_NAME="${APP_NAME}"
+````
+
 ## File: .gitattributes
 ````
 * text=auto eol=lf
@@ -4990,495 +5064,6 @@ EXPOSE 9000
 
 # Startet cron und danach php-fpm im Vordergrund
 CMD ["sh", "-c", "cron && php-fpm -F"]
-````
-
-## File: kletterdom-deployment-anleitung.md
-````markdown
-# Kletterdom Check-in – Deployment Anleitung
-**Docker · Raspberry Pi 4 · HTTPS · Lokales Netzwerk**
-
----
-
-## Voraussetzungen
-
-### Hardware & Betriebssystem
-- Raspberry Pi 4 (min. 4 GB RAM empfohlen)
-- MicroSD-Karte ≥ 32 GB (Class 10 / A2)
-- Netzteil 5V / 3A USB-C
-- LAN-Kabel (stabiler als WLAN)
-- Raspberry Pi OS Lite 64-bit **oder** Ubuntu Server 24.04 LTS (arm64)
-- SSH aktiviert (via Raspberry Pi Imager → Erweiterte Optionen)
-
-### Netzwerk
-- Feste lokale IP am Router reservieren (DHCP-Reservierung per MAC-Adresse)
-- MAC-Adresse abrufen: `ip link show eth0`
-- Ziel-IP Beispiel: `192.168.178.54`
-
-### Erforderliche Software am Pi
-Nur **Docker** und **Git** – PHP, Node.js und MySQL laufen alle im Container.
-
----
-
-## Schritt 1: SSH & Grundeinrichtung
-
-```bash
-# Per SSH verbinden
-ssh pi@192.168.x.x
-
-# Docker installieren
-curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER
-
-# Neu einloggen damit Docker-Gruppe aktiv wird
-exit
-```
-
-Wieder per SSH einloggen, dann:
-
-```bash
-sudo apt update && sudo apt install -y git
-
-# Hostname setzen (für kletterdom.local im Netzwerk)
-sudo hostnamectl set-hostname kletterdom
-sudo apt install -y avahi-daemon
-sudo systemctl enable avahi-daemon
-```
-
----
-
-## Schritt 2: Repository klonen
-
-```bash
-git clone <REPO-URL> kletter-checkin
-cd kletter-checkin
-```
-
----
-
-## Schritt 3: Konfigurationsdateien
-
-### 3.1 docker-compose.yml
-
-```yaml
-services:
-
-  app:
-    build: .
-    image: kletter-checkin
-    container_name: kletter-app
-    restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy    # wartet bis MySQL wirklich bereit ist
-    networks:
-      - kletternet
-    environment:
-      - TZ=Europe/Vienna
-    # KEIN volumes-Mount auf den App-Root! vendor/ würde sonst überschrieben.
-    volumes:
-      - ./backups:/var/www/html/storage/backups   # nur Backup-Unterordner
-
-  nginx:
-    image: nginx:alpine
-    container_name: kletter-nginx
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf
-      - ./docker/ssl:/etc/nginx/ssl
-    depends_on:
-      - app
-    networks:
-      - kletternet
-
-  db:
-    image: mysql:8.0
-    container_name: kletter-db
-    restart: unless-stopped
-    environment:
-      MYSQL_DATABASE: klettercheckin
-      MYSQL_USER: checkinuser
-      MYSQL_PASSWORD: ${DB_PASSWORD}
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
-    volumes:
-      - dbdata:/var/lib/mysql
-    networks:
-      - kletternet
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  node:
-    image: node:20-alpine
-    working_dir: /var/www
-    volumes:
-      - .:/var/www
-    profiles: ["build"]
-
-volumes:
-  dbdata:
-
-networks:
-  kletternet:
-    driver: bridge
-```
-
-### 3.2 Dockerfile
-
-```dockerfile
-FROM php:8.4-fpm
-
-RUN apt-get update && apt-get install -y \
-    git curl zip unzip \
-    default-mysql-client \
-    libpng-dev libonig-dev libxml2-dev \
-    libfreetype6-dev libjpeg62-turbo-dev \
-    && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
-
-# Composer VOR composer install (wichtig!)
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
-
-WORKDIR /var/www/html
-
-COPY composer.json composer.lock ./
-RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
-
-COPY . .
-RUN composer dump-autoload --no-dev --optimize
-
-RUN chown -R www-data:www-data storage bootstrap/cache
-
-EXPOSE 9000
-CMD ["php-fpm"]
-```
-
-> `default-mysql-client` stellt `mysqldump` im Container bereit – wird für automatische Backups benötigt.
-
-### 3.3 Nginx-Konfiguration (`docker/nginx.conf`)
-
-```nginx
-server {
-    listen 80;
-    server_name _;
-    return 301 https://$host$request_uri;
-}
-
-server {
-    listen 443 ssl;
-    server_name _;
-
-    ssl_certificate     /etc/nginx/ssl/nginx.crt;
-    ssl_certificate_key /etc/nginx/ssl/nginx.key;
-    ssl_protocols       TLSv1.2 TLSv1.3;
-    ssl_ciphers         HIGH:!aNULL:!MD5;
-
-    root /var/www/html/public;
-    index index.php;
-
-    location / {
-        try_files $uri $uri/ /index.php?$query_string;
-    }
-
-    location ~ \.php$ {
-        fastcgi_pass app:9000;
-        fastcgi_index index.php;
-        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
-        include fastcgi_params;
-    }
-
-    location ~ /\.ht {
-        deny all;
-    }
-}
-```
-
-### 3.4 Backup-Command (`app/Console/Commands/DatabaseBackup.php`)
-
-```php
-<?php
-
-namespace App\Console\Commands;
-
-use Illuminate\Console\Command;
-
-class DatabaseBackup extends Command
-{
-    protected $signature   = 'backup:database';
-    protected $description = 'MySQL Datenbank-Backup erstellen';
-
-    public function handle(): void
-    {
-        $backupDir = storage_path('backups');
-
-        if (!is_dir($backupDir)) {
-            mkdir($backupDir, 0755, true);
-        }
-
-        $date     = now()->format('Y-m-d_H-i-s');
-        $filename = "kletterdom_{$date}.sql.gz";
-        $path     = "{$backupDir}/{$filename}";
-
-        $db       = config('database.connections.mysql.database');
-        $user     = config('database.connections.mysql.username');
-        $password = config('database.connections.mysql.password');
-        $host     = config('database.connections.mysql.host');
-
-        $command = "mysqldump -h {$host} -u {$user} -p{$password} {$db} | gzip > {$path}";
-        exec($command, $output, $exitCode);
-
-        if ($exitCode !== 0) {
-            $this->error('Backup fehlgeschlagen!');
-            \Log::error('DB Backup fehlgeschlagen', ['exit' => $exitCode]);
-            return;
-        }
-
-        // Backups älter als 30 Tage löschen
-        collect(glob("{$backupDir}/*.sql.gz"))
-            ->filter(fn($f) => filemtime($f) < now()->subDays(30)->timestamp)
-            ->each(fn($f) => unlink($f));
-
-        $this->info("✅ Backup gespeichert: {$filename}");
-        \Log::info('DB Backup erfolgreich', ['file' => $filename]);
-    }
-}
-```
-
-### 3.5 Schedule registrieren (`routes/console.php`)
-
-```php
-use App\Console\Commands\DatabaseBackup;
-
-Schedule::command(DatabaseBackup::class)->dailyAt('03:00');
-```
-
----
-
-## Schritt 4: SSL-Zertifikat erstellen
-
-```bash
-mkdir -p docker/ssl
-
-openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
-  -keyout docker/ssl/nginx.key \
-  -out docker/ssl/nginx.crt \
-  -subj "/CN=192.168.x.x" \
-  -addext "subjectAltName=IP:192.168.x.x,DNS:kletterdom.local"
-```
-
-Die IP `192.168.x.x` durch die tatsächliche Pi-IP ersetzen. Das Zertifikat gilt 10 Jahre.
-
----
-
-## Schritt 5: .env anlegen
-
-```bash
-cp .env.example .env
-nano .env
-```
-
-```env
-APP_NAME="Kletterdom Check-in"
-APP_ENV=production
-APP_DEBUG=false
-APP_URL=https://192.168.x.x
-
-DB_CONNECTION=mysql
-DB_HOST=db
-DB_PORT=3306
-DB_DATABASE=klettercheckin
-DB_USERNAME=checkinuser
-DB_PASSWORD=SicheresPasswort!
-DB_ROOT_PASSWORD=SicheresRootPw!
-
-APP_KEY=                            # wird in Schritt 7 generiert
-
-SESSION_DRIVER=database
-QUEUE_CONNECTION=database
-CACHE_STORE=database
-```
-
----
-
-## Schritt 6: Frontend-Assets bauen
-
-```bash
-docker compose --profile build run --rm node sh -c "npm install && npm run build"
-```
-
-Beim ersten Mal dauert das 3–8 Minuten auf dem Pi.
-
----
-
-## Schritt 7: Container starten & Laravel einrichten
-
-```bash
-# Container starten
-docker compose up -d --build
-
-# .env in Container kopieren + Berechtigungen setzen
-docker compose cp .env app:/var/www/html/.env
-docker compose exec app chown www-data:www-data /var/www/html/.env
-
-# App-Key generieren
-docker compose exec app php artisan key:generate
-
-# .env mit generiertem Key zurückholen
-docker compose cp app:/var/www/html/.env .env
-
-# Datenbank migrieren
-docker compose exec app php artisan migrate --force
-
-# Storage-Link
-docker compose exec app php artisan storage:link
-
-# Cache aktivieren
-docker compose exec app php artisan config:cache
-docker compose exec app php artisan route:cache
-docker compose exec app php artisan view:cache
-```
-
----
-
-## Schritt 8: Admin-User anlegen
-
-```bash
-docker compose exec app php artisan tinker
-```
-
-```php
-$user = \App\Models\User::create([
-    'name'     => 'Admin',
-    'email'    => 'admin@kletterdom.at',
-    'password' => bcrypt('SicheresAdminPasswort!'),
-]);
-$user->is_admin = 1;
-$user->save();
-exit
-```
-
-`is_admin` muss separat gesetzt werden – es ist bewusst nicht in `$fillable` (Sicherheitsmaßnahme gegen Mass Assignment).
-
----
-
-## Schritt 9: Autostart aktivieren
-
-```bash
-sudo systemctl enable docker
-```
-
-Durch `restart: unless-stopped` starten alle Container nach jedem Reboot automatisch.
-
----
-
-## Schritt 10: Automatische Backups einrichten
-
-Backups laufen über den **Laravel Scheduler** und werden täglich um 03:00 Uhr erstellt.  
-Die `.sql.gz`-Dateien landen direkt im Projektordner unter `kletter-checkin/backups/` auf dem Pi.
-
-### Cron-Job einrichten (einmalig)
-
-```bash
-crontab -e
-```
-
-Zeile einfügen:
-
-* * * * * cd /home/pi/kletter-checkin && docker compose exec -T app php artisan schedule:run >> /var/log/kletterdom-scheduler.log 2>&1
-
-
-> Dieser eine Cron-Job reicht – der Laravel Scheduler übernimmt ab dann alle zeitgesteuerten Aufgaben (Backups, Auto-Checkout etc.).
-
-### Backup manuell testen
-
-```bash
-# Backup sofort auslösen
-docker compose exec app php artisan backup:database
-
-# Ergebnis prüfen
-ls -lh backups/
-```
-
-### Backup wiederherstellen (Notfall)
-
-```bash
-gunzip < backups/kletterdom_2026-05-01_03-00-00.sql.gz | \
-  docker compose exec -T db mysql -u checkinuser -pSicheresPasswort! klettercheckin
-```
-
----
-
-## App aufrufen
-
-| URL | Beschreibung |
-|---|---|
-| `https://192.168.x.x` | Direkt per IP |
-| `https://kletterdom.local` | Per Hostname (alle Geräte im Netzwerk) |
-
-Beim ersten Aufruf zeigt der Browser eine Zertifikatswarnung (Self-Signed) – einmalig pro Gerät bestätigen.
-
----
-
-## Update deployen
-
-```bash
-cd kletter-checkin
-
-git pull
-docker compose --profile build run --rm node sh -c "npm run build"
-docker compose up -d --build
-docker compose exec app php artisan migrate --force
-docker compose exec app php artisan config:cache
-docker compose exec app php artisan route:cache
-docker compose exec app php artisan view:cache
-
-echo "Update fertig!"
-```
-
----
-
-## Häufige Befehle
-
-| Aktion | Befehl |
-|---|---|
-| Status prüfen | `docker compose ps` |
-| App neu starten | `docker compose restart app` |
-| Alles stoppen | `docker compose down` |
-| Alles starten | `docker compose up -d` |
-| Laravel-Logs | `docker compose exec app tail -f storage/logs/laravel.log` |
-| Alle Logs live | `docker compose logs -f` |
-| In DB einloggen | `docker compose exec db mysql -u checkinuser -p klettercheckin` |
-| Artisan ausführen | `docker compose exec app php artisan <befehl>` |
-| Backup manuell | `docker compose exec app php artisan backup:database` |
-| Backup-Dateien | `ls -lh backups/` |
-| Mitglieder aus DB entfernen | `docker compose exec app php artisan tinker --execute="DB::table('members')->truncate(); echo 'Done‘;“` |
-
----
-
-## Troubleshooting
-
-| Problem | Lösung |
-|---|---|
-| 500 Error | `docker compose exec app tail -50 storage/logs/laravel.log` |
-| `vendor/autoload.php` fehlt | `volumes: .:/var/www/html` beim app-Service entfernen, neu bauen |
-| `composer: not found` im Build | `COPY --from=composer:latest` muss **vor** `RUN composer install` stehen |
-| `.env` fehlt im Container | `docker compose cp .env app:/var/www/html/.env` |
-| `APP_KEY` fehlt | `echo "APP_KEY=" >> .env` dann `key:generate` |
-| Permission denied auf `.env` | `docker compose exec app chown www-data:www-data /var/www/html/.env` |
-| DB nicht erreichbar | `docker compose ps` – ist `kletter-db` healthy? |
-| Assets fehlen / CSS kaputt | Node-Build-Schritt wiederholen |
-| `is_admin` wird nicht gesetzt | `$user->is_admin = 1; $user->save();` statt über `create()` |
-| Pi sehr langsam beim ersten Build | Normal – Docker-Layer werden danach gecacht |
-| Backup fehlgeschlagen | `storage/logs/laravel.log` prüfen; `mysqldump` vorhanden? `docker compose exec app which mysqldump` |
-
----
-
-*Kletterdom Check-in System · Deployment Guide · Stand Mai 2026*
 ````
 
 ## File: package.json
@@ -6237,344 +5822,6 @@ stderr_logfile_maxbytes=0
 </html>
 ````
 
-## File: resources/views/register.blade.php
-````php
-<!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>Registrierung | Kletterdom</title>
-
-    <!-- Direkte Vite-Einbindung für sauberes Tailwind und JS -->
-    @vite(['resources/css/app.css', 'resources/js/app.js'])
-    
-    <style>
-        /* Verhindert den Standard-Pfeil im Safari/Chrome bei details/summary */
-        details > summary { list-style: none; }
-        details > summary::-webkit-details-marker { display: none; }
-        
-    </style>
-</head>
-<body class="font-sans antialiased bg-gray-50 text-gray-900">
-
-    <div class="min-h-screen py-12 flex flex-col justify-center sm:px-6 lg:px-8">
-        
-        <div class="sm:mx-auto sm:w-full sm:max-w-3xl text-center mb-6">
-            <h2 class="text-3xl font-extrabold text-gray-900">
-                Registrierung Kletterdom
-            </h2>
-            <p class="mt-2 text-sm text-gray-600">
-                Bitte fülle das Formular aus, um dich für den Hallenbesuch zu registrieren.
-            </p>
-        </div>
-
-        <div class="sm:mx-auto sm:w-full sm:max-w-3xl">
-            <div class="bg-white py-8 px-4 shadow-xl sm:rounded-xl sm:px-10 border border-gray-100">
-                
-                @if (session('success'))
-                    <div class="mb-6 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-green-800">
-                        {{ session('success') }}
-                    </div>
-                @endif
-
-                @if ($errors->any())
-                    <div class="mb-6 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-800">
-                        <ul class="list-disc list-inside text-sm">
-                            @foreach ($errors->all() as $error)
-                                <li>{{ $error }}</li>
-                            @endforeach
-                        </ul>
-                    </div>
-                @endif
-
-                <form method="POST" action="{{ url('/halle-register') }}" class="space-y-6">
-                    @csrf
-                    
-                    @php
-                        $hpTimestamp = now()->timestamp;
-                    @endphp
-                    
-                    <input type="hidden" name="hp_time" value="{{ $hpTimestamp }}">
-                    
-                    <div class="sr-only" aria-hidden="true">
-                        <label for="website">Website</label>
-                        <input
-                            type="text"
-                            id="website"
-                            name="website"
-                            value="{{ old('website') }}"
-                            tabindex="-1"
-                            autocomplete="off"
-                        >
-                    
-                        <label for="fax_number">Faxnummer</label>
-                        <input
-                            type="text"
-                            id="fax_number"
-                            name="fax_number"
-                            value="{{ old('fax_number') }}"
-                            tabindex="-1"
-                            autocomplete="off"
-                        >
-                    </div>
-
-                    <!-- Persönliche Daten -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <label for="first_name" class="block text-sm font-medium text-gray-700">Vorname</label>
-                            <input type="text" id="first_name" name="first_name" value="{{ old('first_name') }}" required class="p-2 mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                            @error('first_name') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
-                        </div>
-
-                        <div>
-                            <label for="last_name" class="block text-sm font-medium text-gray-700">Nachname</label>
-                            <input type="text" id="last_name" name="last_name" value="{{ old('last_name') }}" required class="p-2 mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                            @error('last_name') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <label for="birth_date" class="block text-sm font-medium text-gray-700">Geburtsdatum</label>
-                            <input type="date" id="birth_date" name="birth_date" value="{{ old('birth_date') }}" min="1900-01-01" max="{{ date('Y-m-d') }}" required class="p-2 mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                            @error('birth_date') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
-
-                            <!-- Hinweis 14-17 -->
-                            <div id="minor-note" class="hidden mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                                <p class="font-semibold mb-1">Hinweis für Minderjährige</p>
-                                <p id="minor-note-text">Für Kinder von 14 bis 18 Jahren muss beim Hallenbesuch ohne Aufsichtsperson eine unterschriebene Einverständniserklärung der Eltern mitgebracht werden.</p>
-                                <a id="minor-pdf-link" href="https://www.oetk-langenlois.at/fileadmin/Einverstaendniserklaerung-14-18.pdf" target="_blank" rel="noopener noreferrer" class="hidden mt-2 inline-flex font-medium text-amber-900 underline hover:text-amber-700">Einverständniserklärung herunterladen</a>
-                            </div>
-
-                            <!-- Checkbox nur unter 14 -->
-                            <div id="supervision-wrapper" class="hidden mt-3">
-                                <label class="inline-flex items-start bg-amber-50 border border-amber-200 rounded-lg p-3 cursor-pointer">
-                                    <input type="checkbox" id="supervision_confirmed" name="supervision_confirmed" value="1" class="mt-0.5 rounded border-gray-300 text-amber-600 shadow-sm focus:ring-amber-500" {{ old('supervision_confirmed') ? 'checked' : '' }}>
-                                    <span class="ml-2 text-sm text-amber-900 leading-snug">Ich bestätige, dass Kinder unter 14 Jahren nur unter Aufsicht klettern dürfen und beim Besuch eine erziehungsberechtigte oder aufsichtsführende Person dabei ist.</span>
-                                </label>
-                                @error('supervision_confirmed') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
-                            </div>
-                        </div>
-
-                        <div>
-                            <label for="email" class="block text-sm font-medium text-gray-700">E-Mail</label>
-                            <input type="email" id="email" name="email" value="{{ old('email') }}" class="p-2 mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                            @error('email') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
-                        </div>
-                    </div>
-
-                    <fieldset>
-                        <legend class="block text-sm font-medium text-gray-700 mb-2">Typ</legend>
-                        <div class="flex gap-6">
-                            <label class="inline-flex items-center cursor-pointer">
-                                <input type="radio" name="member_type" value="member" class="text-indigo-600 border-gray-300 focus:ring-indigo-500" {{ old('member_type', 'member') === 'member' ? 'checked' : '' }}>
-                                <span class="ml-2 text-gray-700 text-sm">Mitglied</span>
-                            </label>
-                            <label class="inline-flex items-center cursor-pointer">
-                                <input type="radio" name="member_type" value="guest" class="text-indigo-600 border-gray-300 focus:ring-indigo-500" {{ old('member_type') === 'guest' ? 'checked' : '' }}>
-                                <span class="ml-2 text-gray-700 text-sm">Gast / Schnuppern</span>
-                            </label>
-                        </div>
-                        @error('member_type') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
-                    </fieldset>
-
-                    <div id="member-number-wrapper">
-                        <label for="member_number" class="block text-sm font-medium text-gray-700">Mitgliedsnummer</label>
-                        <input type="text" id="member_number" name="member_number" value="{{ old('member_number') }}" placeholder="z. B. 23-10992" class="p-2 mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                        <p class="mt-1 text-xs text-gray-500">Bitte die Vereins-Mitgliedsnummer eingeben.</p>
-                        @error('member_number') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
-                    </div>
-
-                    <!-- NEU: Accordions für Regeln & Haftungsausschluss -->
-                    <div class="pt-6 border-t border-gray-200">
-                        <h3 class="text-lg font-bold text-gray-900 mb-4">Wichtige Informationen</h3>
-                        
-                        <!-- Accordion 1: Haftungsausschluss -->
-                        <details class="group border border-gray-200 rounded-lg bg-gray-50 mb-3 overflow-hidden">
-                            <summary class="flex justify-between items-center font-semibold cursor-pointer p-4 text-gray-800 hover:bg-gray-100 transition-colors">
-                                <span class="flex items-center gap-2">🛡️ Haftungsausschluss & Sicherheit</span>
-                                <span class="transition group-open:rotate-180">
-                                    <svg fill="none" height="20" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="20"><path d="M19 9l-7 7-7-7"></path></svg>
-                                </span>
-                            </summary>
-                            <div class="p-4 border-t border-gray-200 text-sm text-gray-700 bg-white space-y-2">
-                                <p>Klettern und Bouldern sind mit Sturz- und Verletzungsrisiken verbunden. Ich nutze die Anlage eigenverantwortlich.</p>
-                                <ul class="list-disc pl-5 space-y-1 mt-2">
-                                    <li><strong>Bouldern:</strong> Ich bouldere nur über Matten, halte Sturzräume frei und übersteige keine Maximalhöhen.</li>
-                                    <li><strong>Toprope:</strong> Nur wenn ich Gurt, Anseilen und Sicherungsgerät sicher beherrsche.</li>
-                                    <li><strong>Vorstieg:</strong> Nur wenn ich Gurt, Einbinden, Clippen und das Halten von Stürzen sicher beherrsche.</li>
-                                </ul>
-                                <p class="text-amber-700 font-medium mt-2">Falls ich eine dieser Voraussetzungen nicht erfülle, klettere ich nur unter Aufsicht einer geschulten Person.</p>
-                            </div>
-                        </details>
-
-                        <!-- Accordion 2: Hallenordnung -->
-                        <details class="group border border-gray-200 rounded-lg bg-gray-50 mb-6 overflow-hidden">
-                            <summary class="flex justify-between items-center font-semibold cursor-pointer p-4 text-gray-800 hover:bg-gray-100 transition-colors">
-                                <span class="flex items-center gap-2">📋 Hallenordnung ÖTK-Langenlois</span>
-                                <span class="transition group-open:rotate-180">
-                                    <svg fill="none" height="20" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="20"><path d="M19 9l-7 7-7-7"></path></svg>
-                                </span>
-                            </summary>
-                            <div class="p-4 border-t border-gray-200 text-sm text-gray-700 bg-white grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div>
-                                    <h4 class="font-semibold text-indigo-700 mb-1">🧹 Verhalten & Sauberkeit</h4>
-                                    <ul class="list-disc pl-4 space-y-1 text-xs">
-                                        <li>Dom sauber hinterlassen (Gurte & Schuhe aufräumen)</li>
-                                        <li>Kein Essen im Dom; Getränke nur verschlossen</li>
-                                    </ul>
-                                </div>
-                                <div>
-                                    <h4 class="font-semibold text-indigo-700 mb-1">🧗 Kletterregeln</h4>
-                                    <ul class="list-disc pl-4 space-y-1 text-xs">
-                                        <li>Bouldern: Rote Linie beachten, nicht übereinander</li>
-                                        <li>Chalk-Balls erst ab VI+; nur mit Kletterschuhen</li>
-                                    </ul>
-                                </div>
-                                <div>
-                                    <h4 class="font-semibold text-indigo-700 mb-1">🪝 Material</h4>
-                                    <ul class="list-disc pl-4 space-y-1 text-xs">
-                                        <li>Leih-Gurte & Karabiner an vorgesehene Haken</li>
-                                        <li>Bälle/Stäbe/Tiere nur für Kursbetrieb</li>
-                                    </ul>
-                                </div>
-                                <div>
-                                    <h4 class="font-semibold text-indigo-700 mb-1">📅 Termine & Beiträge</h4>
-                                    <ul class="list-disc pl-4 space-y-1 text-xs">
-                                        <li>Klettertreff & Kurse nur für ÖTK-Mitglieder</li>
-                                        <li>Benützungsbeitrag: <strong>4 €</strong> Erwachsene · <strong>2 €</strong> unter 18 J. · <strong>10 €</strong> Familie</li>
-                                    </ul>
-                                </div>
-                            </div>
-                        </details>
-
-                        <!-- Die Zustimmungs-Checkboxen -->
-                        <div class="space-y-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
-                            <label class="flex items-start cursor-pointer">
-                                <input type="checkbox" name="rules_accepted" value="1" class="mt-1 rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500" {{ old('rules_accepted') ? 'checked' : '' }} required>
-                                <span class="ml-3 text-sm text-gray-800">
-                                    Ich habe die <strong>Hallenordnung</strong> gelesen und verpflichte mich, diese sowie die Anweisungen des Personals einzuhalten.
-                                </span>
-                            </label>
-
-                            <label class="flex items-start cursor-pointer">
-                                <input type="checkbox" name="waiver_accepted" value="1" class="mt-1 rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500" {{ old('waiver_accepted') ? 'checked' : '' }} required>
-                                <span class="ml-3 text-sm text-gray-800">
-                                    Ich bestätige, dass ich die <strong>Risiken des Kletterns</strong> kenne und nur jene Bereiche selbständig nutze, für die ich ausreichend geschult bin (andernfalls nur unter Aufsicht).
-                                </span>
-                            </label>
-                        </div>
-                        
-                        @error('rules_accepted') <p class="mt-2 text-sm text-red-600">{{ $message }}</p> @enderror
-                        @error('waiver_accepted') <p class="mt-2 text-sm text-red-600">{{ $message }}</p> @enderror
-                    </div>
-                    
-                    {{-- Datenschutzhinweis --}}
-                    <div class="mt-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-700">
-                        🔒 <strong>Datenschutz:</strong> Wir speichern deine Daten gemäß DSGVO. Sie werden ausschließlich für den Hallenbetrieb verwendet, nicht an Dritte weitergegeben und auf Wunsch sofort gelöscht.
-                    </div>
-
-                    <div class="pt-4">
-                        <button type="submit" class="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors">
-                            Registrierung absenden
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            // Radio Buttons für Mitglied/Gast
-            const memberRadios = document.querySelectorAll('input[name="member_type"]');
-            const memberNumberWrapper = document.getElementById('member-number-wrapper');
-            const memberNumberInput = document.getElementById('member_number');
-    
-            function updateMemberNumberField() {
-                const selected = document.querySelector('input[name="member_type"]:checked')?.value;
-    
-                if (selected === 'guest') {
-                    memberNumberWrapper.classList.add('hidden');
-                    memberNumberInput.required = false;
-                    memberNumberInput.value = '';
-                } else {
-                    memberNumberWrapper.classList.remove('hidden');
-                    memberNumberInput.required = true;
-                }
-            }
-    
-            memberRadios.forEach(function (radio) {
-                radio.addEventListener('change', updateMemberNumberField);
-            });
-    
-            updateMemberNumberField();
-    
-            // Alterslogik für Aufsicht und PDF
-            const birthDateInput = document.getElementById('birth_date');
-            const minorNote = document.getElementById('minor-note');
-            const pdfLink = document.getElementById('minor-pdf-link');
-            const supervisionWrapper = document.getElementById('supervision-wrapper');
-            const supervisionCheckbox = document.getElementById('supervision_confirmed');
-    
-            function updateAgeRules() {
-                if (!birthDateInput || !birthDateInput.value) {
-                    minorNote.classList.add('hidden');
-                    pdfLink.classList.add('hidden');
-                    supervisionWrapper.classList.add('hidden');
-                    supervisionCheckbox.required = false;
-                    supervisionCheckbox.checked = false;
-                    return;
-                }
-    
-                const birthDate = new Date(birthDateInput.value);
-                const today = new Date();
-    
-                let age = today.getFullYear() - birthDate.getFullYear();
-                const monthDiff = today.getMonth() - birthDate.getMonth();
-    
-                if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-                    age--;
-                }
-    
-                if (age < 14) {
-                    minorNote.classList.add('hidden');
-                    pdfLink.classList.add('hidden');
-                    supervisionWrapper.classList.remove('hidden');
-                    supervisionCheckbox.required = true;
-                } else if (age < 18) {
-                    minorNote.classList.remove('hidden');
-                    pdfLink.classList.remove('hidden');
-                    supervisionWrapper.classList.add('hidden');
-                    supervisionCheckbox.required = false;
-                    supervisionCheckbox.checked = false;
-                } else {
-                    minorNote.classList.add('hidden');
-                    pdfLink.classList.add('hidden');
-                    supervisionWrapper.classList.add('hidden');
-                    supervisionCheckbox.required = false;
-                    supervisionCheckbox.checked = false;
-                }
-            }
-    
-            birthDateInput?.addEventListener('change', updateAgeRules);
-            updateAgeRules();
-    
-            // Fix: pageshow feuert nach bfcache-Wiederherstellung, wenn der Browser
-            // den Formularstatus bereits zurückgesetzt hat → UI-Zustand neu anwenden
-            window.addEventListener('pageshow', function () { // ← NEU
-                updateMemberNumberField();                    // ← NEU
-                updateAgeRules();                             // ← NEU
-            });                                               // ← NEU
-        });
-    </script>
-
-</body>
-</html>
-````
-
 ## File: resources/views/verify.blade.php
 ````php
 <!DOCTYPE html>
@@ -6822,6 +6069,495 @@ CACHE_STORE=database
 VITE_APP_NAME="${APP_NAME}"
 ````
 
+## File: kletterdom-deployment-anleitung.md
+````markdown
+# Kletterdom Check-in – Deployment Anleitung
+**Docker · Raspberry Pi 4 · HTTPS · Lokales Netzwerk**
+
+---
+
+## Voraussetzungen
+
+### Hardware & Betriebssystem
+- Raspberry Pi 4 (min. 4 GB RAM empfohlen)
+- MicroSD-Karte ≥ 32 GB (Class 10 / A2)
+- Netzteil 5V / 3A USB-C
+- LAN-Kabel (stabiler als WLAN)
+- Raspberry Pi OS Lite 64-bit **oder** Ubuntu Server 24.04 LTS (arm64)
+- SSH aktiviert (via Raspberry Pi Imager → Erweiterte Optionen)
+
+### Netzwerk
+- Feste lokale IP am Router reservieren (DHCP-Reservierung per MAC-Adresse)
+- MAC-Adresse abrufen: `ip link show eth0`
+- Ziel-IP Beispiel: `192.168.178.54`
+
+### Erforderliche Software am Pi
+Nur **Docker** und **Git** – PHP, Node.js und MySQL laufen alle im Container.
+
+---
+
+## Schritt 1: SSH & Grundeinrichtung
+
+```bash
+# Per SSH verbinden
+ssh pi@192.168.x.x
+
+# Docker installieren
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+
+# Neu einloggen damit Docker-Gruppe aktiv wird
+exit
+```
+
+Wieder per SSH einloggen, dann:
+
+```bash
+sudo apt update && sudo apt install -y git
+
+# Hostname setzen (für kletterdom.local im Netzwerk)
+sudo hostnamectl set-hostname kletterdom
+sudo apt install -y avahi-daemon
+sudo systemctl enable avahi-daemon
+```
+
+---
+
+## Schritt 2: Repository klonen
+
+```bash
+git clone <REPO-URL> kletter-checkin
+cd kletter-checkin
+```
+
+---
+
+## Schritt 3: Konfigurationsdateien
+
+### 3.1 docker-compose.yml
+
+```yaml
+services:
+
+  app:
+    build: .
+    image: kletter-checkin
+    container_name: kletter-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy    # wartet bis MySQL wirklich bereit ist
+    networks:
+      - kletternet
+    environment:
+      - TZ=Europe/Vienna
+    # KEIN volumes-Mount auf den App-Root! vendor/ würde sonst überschrieben.
+    volumes:
+      - ./backups:/var/www/html/storage/backups   # nur Backup-Unterordner
+
+  nginx:
+    image: nginx:alpine
+    container_name: kletter-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./docker/ssl:/etc/nginx/ssl
+    depends_on:
+      - app
+    networks:
+      - kletternet
+
+  db:
+    image: mysql:8.0
+    container_name: kletter-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: klettercheckin
+      MYSQL_USER: checkinuser
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+    volumes:
+      - dbdata:/var/lib/mysql
+    networks:
+      - kletternet
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  node:
+    image: node:20-alpine
+    working_dir: /var/www
+    volumes:
+      - .:/var/www
+    profiles: ["build"]
+
+volumes:
+  dbdata:
+
+networks:
+  kletternet:
+    driver: bridge
+```
+
+### 3.2 Dockerfile
+
+```dockerfile
+FROM php:8.4-fpm
+
+RUN apt-get update && apt-get install -y \
+    git curl zip unzip \
+    default-mysql-client \
+    libpng-dev libonig-dev libxml2-dev \
+    libfreetype6-dev libjpeg62-turbo-dev \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Composer VOR composer install (wichtig!)
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+
+WORKDIR /var/www/html
+
+COPY composer.json composer.lock ./
+RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
+
+COPY . .
+RUN composer dump-autoload --no-dev --optimize
+
+RUN chown -R www-data:www-data storage bootstrap/cache
+
+EXPOSE 9000
+CMD ["php-fpm"]
+```
+
+> `default-mysql-client` stellt `mysqldump` im Container bereit – wird für automatische Backups benötigt.
+
+### 3.3 Nginx-Konfiguration (`docker/nginx.conf`)
+
+```nginx
+server {
+    listen 80;
+    server_name _;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name _;
+
+    ssl_certificate     /etc/nginx/ssl/nginx.crt;
+    ssl_certificate_key /etc/nginx/ssl/nginx.key;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
+
+    root /var/www/html/public;
+    index index.php;
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location ~ \.php$ {
+        fastcgi_pass app:9000;
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+        include fastcgi_params;
+    }
+
+    location ~ /\.ht {
+        deny all;
+    }
+}
+```
+
+### 3.4 Backup-Command (`app/Console/Commands/DatabaseBackup.php`)
+
+```php
+<?php
+
+namespace App\Console\Commands;
+
+use Illuminate\Console\Command;
+
+class DatabaseBackup extends Command
+{
+    protected $signature   = 'backup:database';
+    protected $description = 'MySQL Datenbank-Backup erstellen';
+
+    public function handle(): void
+    {
+        $backupDir = storage_path('backups');
+
+        if (!is_dir($backupDir)) {
+            mkdir($backupDir, 0755, true);
+        }
+
+        $date     = now()->format('Y-m-d_H-i-s');
+        $filename = "kletterdom_{$date}.sql.gz";
+        $path     = "{$backupDir}/{$filename}";
+
+        $db       = config('database.connections.mysql.database');
+        $user     = config('database.connections.mysql.username');
+        $password = config('database.connections.mysql.password');
+        $host     = config('database.connections.mysql.host');
+
+        $command = "mysqldump -h {$host} -u {$user} -p{$password} {$db} | gzip > {$path}";
+        exec($command, $output, $exitCode);
+
+        if ($exitCode !== 0) {
+            $this->error('Backup fehlgeschlagen!');
+            \Log::error('DB Backup fehlgeschlagen', ['exit' => $exitCode]);
+            return;
+        }
+
+        // Backups älter als 30 Tage löschen
+        collect(glob("{$backupDir}/*.sql.gz"))
+            ->filter(fn($f) => filemtime($f) < now()->subDays(30)->timestamp)
+            ->each(fn($f) => unlink($f));
+
+        $this->info("✅ Backup gespeichert: {$filename}");
+        \Log::info('DB Backup erfolgreich', ['file' => $filename]);
+    }
+}
+```
+
+### 3.5 Schedule registrieren (`routes/console.php`)
+
+```php
+use App\Console\Commands\DatabaseBackup;
+
+Schedule::command(DatabaseBackup::class)->dailyAt('03:00');
+```
+
+---
+
+## Schritt 4: SSL-Zertifikat erstellen
+
+```bash
+mkdir -p docker/ssl
+
+openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+  -keyout docker/ssl/nginx.key \
+  -out docker/ssl/nginx.crt \
+  -subj "/CN=192.168.x.x" \
+  -addext "subjectAltName=IP:192.168.x.x,DNS:kletterdom.local"
+```
+
+Die IP `192.168.x.x` durch die tatsächliche Pi-IP ersetzen. Das Zertifikat gilt 10 Jahre.
+
+---
+
+## Schritt 5: .env anlegen
+
+```bash
+cp .env.example .env
+nano .env
+```
+
+```env
+APP_NAME="Kletterdom Check-in"
+APP_ENV=production
+APP_DEBUG=false
+APP_URL=https://192.168.x.x
+
+DB_CONNECTION=mysql
+DB_HOST=db
+DB_PORT=3306
+DB_DATABASE=klettercheckin
+DB_USERNAME=checkinuser
+DB_PASSWORD=SicheresPasswort!
+DB_ROOT_PASSWORD=SicheresRootPw!
+
+APP_KEY=                            # wird in Schritt 7 generiert
+
+SESSION_DRIVER=database
+QUEUE_CONNECTION=database
+CACHE_STORE=database
+```
+
+---
+
+## Schritt 6: Frontend-Assets bauen
+
+```bash
+docker compose --profile build run --rm node sh -c "npm install && npm run build"
+```
+
+Beim ersten Mal dauert das 3–8 Minuten auf dem Pi.
+
+---
+
+## Schritt 7: Container starten & Laravel einrichten
+
+```bash
+# Container starten
+docker compose up -d --build
+
+# .env in Container kopieren + Berechtigungen setzen
+docker compose cp .env app:/var/www/html/.env
+docker compose exec app chown www-data:www-data /var/www/html/.env
+
+# App-Key generieren
+docker compose exec app php artisan key:generate
+
+# .env mit generiertem Key zurückholen
+docker compose cp app:/var/www/html/.env .env
+
+# Datenbank migrieren
+docker compose exec app php artisan migrate --force
+
+# Storage-Link
+docker compose exec app php artisan storage:link
+
+# Cache aktivieren
+docker compose exec app php artisan config:cache
+docker compose exec app php artisan route:cache
+docker compose exec app php artisan view:cache
+```
+
+---
+
+## Schritt 8: Admin-User anlegen
+
+```bash
+docker compose exec app php artisan tinker
+```
+
+```php
+$user = \App\Models\User::create([
+    'name'     => 'Admin',
+    'email'    => 'admin@kletterdom.at',
+    'password' => bcrypt('SicheresAdminPasswort!'),
+]);
+$user->is_admin = 1;
+$user->save();
+exit
+```
+
+`is_admin` muss separat gesetzt werden – es ist bewusst nicht in `$fillable` (Sicherheitsmaßnahme gegen Mass Assignment).
+
+---
+
+## Schritt 9: Autostart aktivieren
+
+```bash
+sudo systemctl enable docker
+```
+
+Durch `restart: unless-stopped` starten alle Container nach jedem Reboot automatisch.
+
+---
+
+## Schritt 10: Automatische Backups einrichten
+
+Backups laufen über den **Laravel Scheduler** und werden täglich um 03:00 Uhr erstellt.  
+Die `.sql.gz`-Dateien landen direkt im Projektordner unter `kletter-checkin/backups/` auf dem Pi.
+
+### Cron-Job einrichten (einmalig)
+
+```bash
+crontab -e
+```
+
+Zeile einfügen:
+
+* * * * * cd /home/pi/kletter-checkin && docker compose exec -T app php artisan schedule:run >> /var/log/kletterdom-scheduler.log 2>&1
+
+
+> Dieser eine Cron-Job reicht – der Laravel Scheduler übernimmt ab dann alle zeitgesteuerten Aufgaben (Backups, Auto-Checkout etc.).
+
+### Backup manuell testen
+
+```bash
+# Backup sofort auslösen
+docker compose exec app php artisan backup:database
+
+# Ergebnis prüfen
+ls -lh backups/
+```
+
+### Backup wiederherstellen (Notfall)
+
+```bash
+gunzip < backups/kletterdom_2026-05-01_03-00-00.sql.gz | \
+  docker compose exec -T db mysql -u checkinuser -pSicheresPasswort! klettercheckin
+```
+
+---
+
+## App aufrufen
+
+| URL | Beschreibung |
+|---|---|
+| `https://192.168.x.x` | Direkt per IP |
+| `https://kletterdom.local` | Per Hostname (alle Geräte im Netzwerk) |
+
+Beim ersten Aufruf zeigt der Browser eine Zertifikatswarnung (Self-Signed) – einmalig pro Gerät bestätigen.
+
+---
+
+## Update deployen
+
+```bash
+cd kletter-checkin
+
+git pull
+docker compose --profile build run --rm node sh -c "npm run build"
+docker compose up -d --build
+docker compose exec app php artisan migrate --force
+docker compose exec app php artisan config:cache
+docker compose exec app php artisan route:cache
+docker compose exec app php artisan view:cache
+
+echo "Update fertig!"
+```
+
+---
+
+## Häufige Befehle
+
+| Aktion | Befehl |
+|---|---|
+| Status prüfen | `docker compose ps` |
+| App neu starten | `docker compose restart app` |
+| Alles stoppen | `docker compose down` |
+| Alles starten | `docker compose up -d` |
+| Laravel-Logs | `docker compose exec app tail -f storage/logs/laravel.log` |
+| Alle Logs live | `docker compose logs -f` |
+| In DB einloggen | `docker compose exec db mysql -u checkinuser -p klettercheckin` |
+| Artisan ausführen | `docker compose exec app php artisan <befehl>` |
+| Backup manuell | `docker compose exec app php artisan backup:database` |
+| Backup-Dateien | `ls -lh backups/` |
+| Mitglieder aus DB entfernen | `docker compose exec app php artisan tinker --execute="DB::table('members')->truncate(); echo 'Done‘;“` |
+
+---
+
+## Troubleshooting
+
+| Problem | Lösung |
+|---|---|
+| 500 Error | `docker compose exec app tail -50 storage/logs/laravel.log` |
+| `vendor/autoload.php` fehlt | `volumes: .:/var/www/html` beim app-Service entfernen, neu bauen |
+| `composer: not found` im Build | `COPY --from=composer:latest` muss **vor** `RUN composer install` stehen |
+| `.env` fehlt im Container | `docker compose cp .env app:/var/www/html/.env` |
+| `APP_KEY` fehlt | `echo "APP_KEY=" >> .env` dann `key:generate` |
+| Permission denied auf `.env` | `docker compose exec app chown www-data:www-data /var/www/html/.env` |
+| DB nicht erreichbar | `docker compose ps` – ist `kletter-db` healthy? |
+| Assets fehlen / CSS kaputt | Node-Build-Schritt wiederholen |
+| `is_admin` wird nicht gesetzt | `$user->is_admin = 1; $user->save();` statt über `create()` |
+| Pi sehr langsam beim ersten Build | Normal – Docker-Layer werden danach gecacht |
+| Backup fehlgeschlagen | `storage/logs/laravel.log` prüfen; `mysqldump` vorhanden? `docker compose exec app which mysqldump` |
+
+---
+
+*Kletterdom Check-in System · Deployment Guide · Stand Mai 2026*
+````
+
 ## File: app/Console/Commands/AutoCheckoutExpiredCheckins.php
 ````php
 <?php
@@ -6888,305 +6624,6 @@ class AutoCheckoutExpiredCheckins extends Command
         $this->info("Auto-Checkout abgeschlossen: {$closedCount} Check-ins geschlossen.");
 
         return self::SUCCESS;
-    }
-}
-````
-
-## File: app/Http/Controllers/RegistrationController.php
-````php
-<?php
-
-namespace App\Http\Controllers;
-
-use App\Models\Checkin;
-use App\Models\Registration;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Validation\ValidationException;
-use Carbon\Carbon;
-
-class RegistrationController extends Controller
-{
-    public function create(Request $request)
-    {
-        $request->session()->put('register_form_started_at', now()->timestamp);
-        return view('register');
-    }
-
-    public function store(Request $request)
-    {
-        if (filled($request->input('website')) || filled($request->input('fax_number'))) {
-            Log::warning('Spam blockiert: Honeypot-Feld ausgefüllt', [
-                'ip' => $request->ip(),
-                'ua' => $request->userAgent(),
-            ]);
-            throw ValidationException::withMessages([
-                'first_name' => 'Die Registrierung konnte nicht verarbeitet werden. Bitte versuche es erneut.',
-            ]);
-        }
-
-        $formStartedAt = (int) $request->session()->get('register_form_started_at', 0);
-        $secondsTaken = now()->timestamp - $formStartedAt;
-        if ($formStartedAt <= 0 || $secondsTaken < 3) {
-            Log::warning('Spam blockiert: Formular zu schnell abgesendet', [
-                'ip' => $request->ip(),
-                'ua' => $request->userAgent(),
-                'seconds_taken' => $secondsTaken,
-            ]);
-            throw ValidationException::withMessages([
-                'first_name' => 'Die Registrierung konnte nicht verarbeitet werden. Bitte versuche es erneut.',
-            ]);
-        }
-
-        $validated = $request->validate([
-            'first_name' => ['required', 'string', 'max:255'],
-            'last_name' => ['required', 'string', 'max:255'],
-            'birth_date' => ['required', 'date', 'after_or_equal:1900-01-01', 'before_or_equal:today'],
-            'email' => ['nullable', 'email', 'max:255'],
-            'member_type' => ['required', 'in:member,guest'],
-            'member_number' => ['required_if:member_type,member', 'nullable', 'string', 'max:255'],
-            'waiver_accepted' => ['required', 'accepted'],
-            'rules_accepted' => ['required', 'accepted'],
-            'supervision_confirmed' => ['nullable', 'boolean'],
-            'hp_time' => ['required', 'integer'],
-            'website' => ['nullable', 'max:0'],
-            'fax_number' => ['nullable', 'max:0'],
-            'birthdate.required' => 'Das Geburtsdatum ist erforderlich, um doppelte Registrierungen zu vermeiden.',
-        ]);
-        
-        // Freitextfelder bereinigen
-        $validated['first_name']    = strip_tags($validated['first_name']);
-        $validated['last_name']     = strip_tags($validated['last_name']);
-        $validated['member_number'] = isset($validated['member_number'])
-            ? strip_tags($validated['member_number'])
-            : null;
-
-        $birthDate = Carbon::parse($validated['birth_date']);
-        $age = $birthDate->age;
-        $needsSupervision = $age < 14;
-        $needsParentConsent = $age >= 14 && $age < 18;
-
-        if ($needsSupervision && !$request->boolean('supervision_confirmed')) {
-            throw ValidationException::withMessages([
-                'supervision_confirmed' => 'Für Kinder unter 14 Jahren muss bestätigt werden, dass Klettern nur unter Aufsicht erfolgt.',
-            ]);
-        }
-
-        $member = null;
-        if ($validated['member_type'] === 'member') {
-            $member = DB::table('members')->where('member_number', $validated['member_number'])->first();
-            if ($member) {
-                $lastNameInput = strtolower(trim($validated['last_name']));
-                $lastNameCsv = strtolower(trim($member->last_name ?? ''));
-                if ($lastNameInput !== $lastNameCsv) {
-                    throw ValidationException::withMessages([
-                        'member_number' => 'Die Mitgliedsnummer existiert, passt aber nicht zu den eingegebenen Daten. Bitte prüfen!',
-                    ]);
-                }
-            }
-        }
-
-        // 🔍 DUPLIKAT-SUCHE
-        $query = Registration::query();
-        
-        if ($validated['member_type'] === 'member' && !empty($validated['member_number'])) {
-            $query->where('member_number', $validated['member_number']);
-        } else {
-            $query->whereRaw('LOWER(last_name) = ?', [strtolower(trim($validated['last_name']))])
-                  ->where('birth_date', $validated['birth_date']);
-        }
-
-        $existingReg = $query->first();
-
-        // ➕ FIX 1: Gast-Upgrade – nach Name+Birthdate suchen, falls Mitglied & kein Treffer
-        if (!$existingReg && $validated['member_type'] === 'member') {
-            $existingReg = Registration::whereRaw('LOWER(last_name) = ?', [strtolower(trim($validated['last_name']))])
-                ->where('birth_date', $validated['birth_date'])
-                ->where('member_type', 'guest')
-                ->first();
-        }
-
-        // 🔒 GAST-BLOCK
-        if ($existingReg) {
-            // ➕ FIX 2: Upgrade-Logik – Gast → Mitglied erlauben
-            $isUpgrade = $existingReg->member_type === 'guest' && $validated['member_type'] === 'member';
-
-            if (!$isUpgrade) {
-                if ($existingReg->member_type === 'guest') {
-                    if (($existingReg->trial_visits_count ?? 0) >= 2) {
-                        throw ValidationException::withMessages([
-                            'first_name' => 'Du hast das Schnupper-Limit bereits vollständig ausgeschöpft. Eine weitere Registrierung als Gast ist nicht möglich.',
-                        ]);
-                    }
-                    $hasKulanz = $existingReg->manual_exception_until && $existingReg->manual_exception_until->isFuture();
-                    if (!$hasKulanz) {
-                        throw ValidationException::withMessages([
-                            'first_name' => 'Du bist bereits als Schnuppergast registriert. Ein zweites Mal ist nur nach Absprache mit dem Hallendienst möglich.',
-                        ]);
-                    }
-                } else {
-                    return redirect('verify/' . $existingReg->qr_token)->with('success', 'Du warst bereits registriert! Hier ist dein aktueller Status.');
-                }
-            }
-        }
-
-        $accessStatus = 'red';
-        $accessReason = 'Unbekannt';
-        $paymentStatus = 'paid';
-
-        if ($validated['member_type'] === 'guest') {
-            $validated['member_number'] = null;
-            if (!$existingReg) {
-                $accessStatus = 'blue';
-                $accessReason = 'Schnupperklettern';
-            } else {
-                $accessStatus = 'orange';
-                $accessReason = 'Kulanz: ' . $existingReg->manual_exception_reason;
-            }
-        } elseif ($validated['member_type'] === 'member') {
-            if (!$member) {
-                $accessStatus = 'orange';
-                $accessReason = 'Mitglied noch unbestätigt (nicht in Datenbank)';
-                $paymentStatus = 'overdue';
-            } elseif (($member->membership_status ?? null) !== 'active') {
-                $accessStatus = 'red';
-                $accessReason = 'Mitgliedschaft inaktiv';
-                $paymentStatus = 'overdue';
-            } elseif (($member->payment_status ?? null) === 'open') {
-                $accessStatus = 'orange';
-                $accessReason = 'Beitrag offen';
-                $paymentStatus = 'overdue';
-            } else {
-                $accessStatus = 'green';
-                $accessReason = 'Mitgliedschaft aktiv & bezahlt';
-                $paymentStatus = 'paid';
-            }
-        }
-
-        if ($needsSupervision) {
-            if ($validated['member_type'] === 'guest') {
-                $accessReason .= ' | Unter 14 – Aufsicht erforderlich';
-            } else {
-                if ($request->boolean('supervision_confirmed')) {
-                    $accessStatus = 'green';
-                    $accessReason = 'Unter 14 – Aufsicht erforderlich';
-                } else {
-                    $accessStatus = 'orange';
-                    $accessReason = 'Unter 14 – Aufsicht erforderlich';
-                }
-            }
-        }
-
-        if ($needsParentConsent) {
-            if ($validated['member_type'] === 'guest') {
-                $accessReason .= ' | Jugendlicher 14–17';
-            } else {
-                $accessStatus = 'green';
-                $accessReason = 'Jugendlicher 14–17';
-            }
-        }
-
-        if ($existingReg) {
-            // ➕ FIX 3: member_type + member_number mitschreiben
-            $existingReg->update([
-                'member_type'    => $validated['member_type'],
-                'member_number'  => $validated['member_number'] ?? null,
-                'waiver_accepted' => true,
-                'birth_date' => $validated['birth_date'],
-                'email' => $validated['email'] ?? null,
-                'access_status' => $accessStatus,
-                'access_reason' => $accessReason,
-                'needs_supervision' => $needsSupervision,
-                'needs_parent_consent' => $needsParentConsent,
-                'parent_consent_received' => $needsParentConsent ? $existingReg->parent_consent_received : false,
-                'parent_consent_received_at' => $needsParentConsent ? $existingReg->parent_consent_received_at : null,
-                'supervision_confirmed' => $needsSupervision ? $request->boolean('supervision_confirmed') : false,
-            ]);
-            $registration = $existingReg;
-        } else {
-            $registration = Registration::create([
-                'first_name' => $validated['first_name'],
-                'last_name' => $validated['last_name'],
-                'birth_date' => $validated['birth_date'],
-                'email' => $validated['email'] ?? null,
-                'member_type' => $validated['member_type'],
-                'member_number' => $validated['member_number'] ?? null,
-                'waiver_accepted' => true,
-                'waiver_version' => 'v1',
-                'payment_status' => $paymentStatus,
-                'access_status' => $accessStatus,
-                'access_reason' => $accessReason,
-                'trial_visits_count' => 0,
-                'needs_supervision' => $needsSupervision,
-                'needs_parent_consent' => $needsParentConsent,
-                'parent_consent_received' => false,
-                'parent_consent_received_at' => null,
-                'supervision_confirmed' => $needsSupervision ? $request->boolean('supervision_confirmed') : false,
-                'qr_token' => (string) Str::uuid(),
-            ]);
-        }
-
-        return redirect('verify/' . $registration->qr_token)->with('success', 'Registrierung erfolgreich!');
-    }
-
-    public function verify($token)
-    {
-        $registration = Registration::with('currentCheckin')->where('qr_token', $token)->firstOrFail();
-        return view('verify', compact('registration'));
-    }
-
-    public function checkin(Request $request, $token)
-    {
-        $registration = Registration::with('currentCheckin')->where('qr_token', $token)->first();
-        if (! $registration) {
-            $msg = 'QR-Code ungültig oder abgelaufen.';
-            return $request->expectsJson() ? response()->json(['success' => false, 'message' => $msg], 404) : abort(404, $msg);
-        }
-
-        $hasActiveKulanz = $registration->manual_exception_until && $registration->manual_exception_until->isFuture();
-        $needsKulanz = in_array($registration->access_status, ['red', 'orange']) && !$hasActiveKulanz;
-        if ($needsKulanz) {
-            $statusText = strtoupper($registration->access_status);
-            $message = "Check-in blockiert! Status ist {$statusText}. Kulanz erforderlich (" . ($registration->access_reason ?? 'Unbekannt') . ").";
-            if ($request->expectsJson()) {
-                return response()->json(['success' => false, 'message' => $message], 403);
-            }
-            return redirect()->route('verify', $registration->qr_token)->with('error', $message);
-        }
-
-        if ($registration->currentCheckin) {
-            $message = $registration->first_name . ' ' . $registration->last_name . ' ist bereits seit ' . $registration->currentCheckin->checked_in_at->format('H:i') . ' Uhr eingecheckt.';
-            if ($request->expectsJson()) {
-                return response()->json(['success' => false, 'message' => $message], 422);
-            }
-            return redirect()->route('verify', $registration->qr_token)->with('error', $message);
-        }
-        
-        // Nur green/blue dürfen direkt einchecken
-        if (! in_array($registration->access_status, ['green', 'blue'])) {
-            $message = $registration->access_status === 'red'
-                ? 'Kein Zutritt erlaubt.'
-                : 'Zutritt erfordert manuelle Freigabe durch den Hallendienst.';
-        
-            // JSON für QR-Scanner, Redirect für direkte Formular-Posts
-            if (request()->expectsJson()) {
-                return response()->json(['success' => false, 'message' => $message], 403);
-            }
-        
-            return redirect()
-                ->back()
-                ->with('error', 'Check-in verweigert: ' . $message);
-        }
-
-        Checkin::create(['registration_id' => $registration->id, 'checked_in_at' => now()]);
-        $registration->increment('trial_visits_count');
-        $message = $registration->first_name . ' ' . $registration->last_name . ' wurde erfolgreich eingecheckt.';
-        if ($request->expectsJson()) {
-            return response()->json(['success' => true, 'message' => $message]);
-        }
-        return redirect()->route('verify', $registration->qr_token)->with('success', $message);
     }
 }
 ````
@@ -7487,6 +6924,693 @@ class RegistrationController extends Controller
     </script>
 </body>
 </html>
+````
+
+## File: resources/views/register.blade.php
+````php
+<!DOCTYPE html>
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>Registrierung | Kletterdom</title>
+
+    <!-- Direkte Vite-Einbindung für sauberes Tailwind und JS -->
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
+    
+    <style>
+        /* Verhindert den Standard-Pfeil im Safari/Chrome bei details/summary */
+        details > summary { list-style: none; }
+        details > summary::-webkit-details-marker { display: none; }
+        
+    </style>
+</head>
+<body class="font-sans antialiased bg-gray-50 text-gray-900">
+
+    <div class="min-h-screen py-12 flex flex-col justify-center sm:px-6 lg:px-8">
+        
+        <div class="sm:mx-auto sm:w-full sm:max-w-3xl text-center mb-6">
+            <h2 class="text-3xl font-extrabold text-gray-900">
+                Registrierung Kletterdom
+            </h2>
+            <p class="mt-2 text-sm text-gray-600">
+                Bitte fülle das Formular aus, um dich für den Hallenbesuch zu registrieren.
+            </p>
+        </div>
+
+        <div class="sm:mx-auto sm:w-full sm:max-w-3xl">
+            <div class="bg-white py-8 px-4 shadow-xl sm:rounded-xl sm:px-10 border border-gray-100">
+                
+                @if (session('success'))
+                    <div class="mb-6 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-green-800">
+                        {{ session('success') }}
+                    </div>
+                @endif
+
+                @if ($errors->any())
+                    <div class="mb-6 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-800">
+                        <ul class="list-disc list-inside text-sm">
+                            @foreach ($errors->all() as $error)
+                                <li>{{ $error }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
+
+                <form method="POST" action="{{ url('/halle-register') }}" class="space-y-6">
+                    @csrf
+                    
+                    @php
+                        $hpTimestamp = now()->timestamp;
+                    @endphp
+                    
+                    <input type="hidden" name="hp_time" value="{{ $hpTimestamp }}">
+                    
+                    <div class="sr-only" aria-hidden="true">
+                        <label for="website">Website</label>
+                        <input
+                            type="text"
+                            id="website"
+                            name="website"
+                            value="{{ old('website') }}"
+                            tabindex="-1"
+                            autocomplete="off"
+                        >
+                    
+                        <label for="fax_number">Faxnummer</label>
+                        <input
+                            type="text"
+                            id="fax_number"
+                            name="fax_number"
+                            value="{{ old('fax_number') }}"
+                            tabindex="-1"
+                            autocomplete="off"
+                        >
+                    </div>
+
+                    <!-- Persönliche Daten -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label for="first_name" class="block text-sm font-medium text-gray-700">Vorname</label>
+                            <input type="text" id="first_name" name="first_name" value="{{ old('first_name') }}" required class="p-2 mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            @error('first_name') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                        </div>
+
+                        <div>
+                            <label for="last_name" class="block text-sm font-medium text-gray-700">Nachname</label>
+                            <input type="text" id="last_name" name="last_name" value="{{ old('last_name') }}" required class="p-2 mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            @error('last_name') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label for="birth_date" class="block text-sm font-medium text-gray-700">Geburtsdatum</label>
+                            <input type="date" id="birth_date" name="birth_date" value="{{ old('birth_date') }}" min="1900-01-01" max="{{ date('Y-m-d') }}" required class="p-2 mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            @error('birth_date') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+
+                            <!-- Hinweis 14-17 -->
+                            <div id="minor-note" class="hidden mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                                <p class="font-semibold mb-1">Hinweis für Minderjährige</p>
+                                <p id="minor-note-text">Für Kinder von 14 bis 18 Jahren muss beim Hallenbesuch ohne Aufsichtsperson eine unterschriebene Einverständniserklärung der Eltern mitgebracht werden.</p>
+                                <a id="minor-pdf-link" href="https://www.oetk-langenlois.at/fileadmin/Einverstaendniserklaerung-14-18.pdf" target="_blank" rel="noopener noreferrer" class="hidden mt-2 inline-flex font-medium text-amber-900 underline hover:text-amber-700">Einverständniserklärung herunterladen</a>
+                            </div>
+
+                            <!-- Checkbox nur unter 14 -->
+                            <div id="supervision-wrapper" class="hidden mt-3">
+                                <label class="inline-flex items-start bg-amber-50 border border-amber-200 rounded-lg p-3 cursor-pointer">
+                                    <input type="checkbox" id="supervision_confirmed" name="supervision_confirmed" value="1" class="mt-0.5 rounded border-gray-300 text-amber-600 shadow-sm focus:ring-amber-500" {{ old('supervision_confirmed') ? 'checked' : '' }}>
+                                    <span class="ml-2 text-sm text-amber-900 leading-snug">Ich bestätige, dass Kinder unter 14 Jahren nur unter Aufsicht klettern dürfen und beim Besuch eine erziehungsberechtigte oder aufsichtsführende Person dabei ist.</span>
+                                </label>
+                                @error('supervision_confirmed') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                            </div>
+                        </div>
+
+                        <div>
+                            <label for="email" class="block text-sm font-medium text-gray-700">E-Mail</label>
+                            <input type="email" id="email" name="email" value="{{ old('email') }}" class="p-2 mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            @error('email') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                        </div>
+                    </div>
+
+                    <fieldset>
+                        <legend class="block text-sm font-medium text-gray-700 mb-2">Typ</legend>
+                        <div class="flex gap-6">
+                            <label class="inline-flex items-center cursor-pointer">
+                                <input type="radio" name="member_type" value="member" class="text-indigo-600 border-gray-300 focus:ring-indigo-500" {{ old('member_type', 'member') === 'member' ? 'checked' : '' }}>
+                                <span class="ml-2 text-gray-700 text-sm">Mitglied</span>
+                            </label>
+                            <label class="inline-flex items-center cursor-pointer">
+                                <input type="radio" name="member_type" value="guest" class="text-indigo-600 border-gray-300 focus:ring-indigo-500" {{ old('member_type') === 'guest' ? 'checked' : '' }}>
+                                <span class="ml-2 text-gray-700 text-sm">Gast / Schnuppern</span>
+                            </label>
+                        </div>
+                        @error('member_type') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                    </fieldset>
+
+                    <div id="member-number-wrapper">
+                        <label for="member_number" class="block text-sm font-medium text-gray-700">Mitgliedsnummer</label>
+                        <input type="text" id="member_number" name="member_number" value="{{ old('member_number') }}" placeholder="z. B. 23-34567" pattern="\d{2}-\d{5}" class="p-2 mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" autocomplete="off" inputmode="numeric" maxlength="8">
+                        <p class="mt-1 text-xs text-gray-500">Bitte die Vereins-Mitgliedsnummer eingeben.</p>
+                        @error('member_number') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                    </div>
+
+                    <!-- NEU: Accordions für Regeln & Haftungsausschluss -->
+                    <div class="pt-6 border-t border-gray-200">
+                        <h3 class="text-lg font-bold text-gray-900 mb-4">Wichtige Informationen</h3>
+                        
+                        <!-- Accordion 1: Haftungsausschluss -->
+                        <details class="group border border-gray-200 rounded-lg bg-gray-50 mb-3 overflow-hidden">
+                            <summary class="flex justify-between items-center font-semibold cursor-pointer p-4 text-gray-800 hover:bg-gray-100 transition-colors">
+                                <span class="flex items-center gap-2">🛡️ Haftungsausschluss & Sicherheit</span>
+                                <span class="transition group-open:rotate-180">
+                                    <svg fill="none" height="20" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="20"><path d="M19 9l-7 7-7-7"></path></svg>
+                                </span>
+                            </summary>
+                            <div class="p-4 border-t border-gray-200 text-sm text-gray-700 bg-white space-y-2">
+                                <p>Klettern und Bouldern sind mit Sturz- und Verletzungsrisiken verbunden. Ich nutze die Anlage eigenverantwortlich.</p>
+                                <ul class="list-disc pl-5 space-y-1 mt-2">
+                                    <li><strong>Bouldern:</strong> Ich bouldere nur über Matten, halte Sturzräume frei und übersteige keine Maximalhöhen.</li>
+                                    <li><strong>Toprope:</strong> Nur wenn ich Gurt, Anseilen und Sicherungsgerät sicher beherrsche.</li>
+                                    <li><strong>Vorstieg:</strong> Nur wenn ich Gurt, Einbinden, Clippen und das Halten von Stürzen sicher beherrsche.</li>
+                                </ul>
+                                <p class="text-amber-700 font-medium mt-2">Falls ich eine dieser Voraussetzungen nicht erfülle, klettere ich nur unter Aufsicht einer geschulten Person.</p>
+                            </div>
+                        </details>
+
+                        <!-- Accordion 2: Hallenordnung -->
+                        <details class="group border border-gray-200 rounded-lg bg-gray-50 mb-6 overflow-hidden">
+                            <summary class="flex justify-between items-center font-semibold cursor-pointer p-4 text-gray-800 hover:bg-gray-100 transition-colors">
+                                <span class="flex items-center gap-2">📋 Hallenordnung ÖTK-Langenlois</span>
+                                <span class="transition group-open:rotate-180">
+                                    <svg fill="none" height="20" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="20"><path d="M19 9l-7 7-7-7"></path></svg>
+                                </span>
+                            </summary>
+                            <div class="p-4 border-t border-gray-200 text-sm text-gray-700 bg-white grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <h4 class="font-semibold text-indigo-700 mb-1">🧹 Verhalten & Sauberkeit</h4>
+                                    <ul class="list-disc pl-4 space-y-1 text-xs">
+                                        <li>Dom sauber hinterlassen (Gurte & Schuhe aufräumen)</li>
+                                        <li>Kein Essen im Dom; Getränke nur verschlossen</li>
+                                    </ul>
+                                </div>
+                                <div>
+                                    <h4 class="font-semibold text-indigo-700 mb-1">🧗 Kletterregeln</h4>
+                                    <ul class="list-disc pl-4 space-y-1 text-xs">
+                                        <li>Bouldern: Rote Linie beachten, nicht übereinander</li>
+                                        <li>Chalk-Balls erst ab VI+; nur mit Kletterschuhen</li>
+                                    </ul>
+                                </div>
+                                <div>
+                                    <h4 class="font-semibold text-indigo-700 mb-1">🪝 Material</h4>
+                                    <ul class="list-disc pl-4 space-y-1 text-xs">
+                                        <li>Leih-Gurte & Karabiner an vorgesehene Haken</li>
+                                        <li>Bälle/Stäbe/Tiere nur für Kursbetrieb</li>
+                                    </ul>
+                                </div>
+                                <div>
+                                    <h4 class="font-semibold text-indigo-700 mb-1">📅 Termine & Beiträge</h4>
+                                    <ul class="list-disc pl-4 space-y-1 text-xs">
+                                        <li>Klettertreff & Kurse nur für ÖTK-Mitglieder</li>
+                                        <li>Benützungsbeitrag: <strong>4 €</strong> Erwachsene · <strong>2 €</strong> unter 18 J. · <strong>10 €</strong> Familie</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </details>
+
+                        <!-- Die Zustimmungs-Checkboxen -->
+                        <div class="space-y-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                            <label class="flex items-start cursor-pointer">
+                                <input type="checkbox" name="rules_accepted" value="1" class="mt-1 rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500" {{ old('rules_accepted') ? 'checked' : '' }} required>
+                                <span class="ml-3 text-sm text-gray-800">
+                                    Ich habe die <strong>Hallenordnung</strong> gelesen und verpflichte mich, diese sowie die Anweisungen des Personals einzuhalten.
+                                </span>
+                            </label>
+
+                            <label class="flex items-start cursor-pointer">
+                                <input type="checkbox" name="waiver_accepted" value="1" class="mt-1 rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500" {{ old('waiver_accepted') ? 'checked' : '' }} required>
+                                <span class="ml-3 text-sm text-gray-800">
+                                    Ich bestätige, dass ich die <strong>Risiken des Kletterns</strong> kenne und nur jene Bereiche selbständig nutze, für die ich ausreichend geschult bin (andernfalls nur unter Aufsicht).
+                                </span>
+                            </label>
+                        </div>
+                        
+                        @error('rules_accepted') <p class="mt-2 text-sm text-red-600">{{ $message }}</p> @enderror
+                        @error('waiver_accepted') <p class="mt-2 text-sm text-red-600">{{ $message }}</p> @enderror
+                    </div>
+                    
+                    {{-- Datenschutzhinweis --}}
+                    <div class="mt-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-700">
+                        🔒 <strong>Datenschutz:</strong> Wir speichern deine Daten gemäß DSGVO. Sie werden ausschließlich für den Hallenbetrieb verwendet, nicht an Dritte weitergegeben und auf Wunsch sofort gelöscht.
+                    </div>
+
+                    <div class="pt-4">
+                        <button type="submit" class="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors">
+                            Registrierung absenden
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        
+        document.getElementById('member_number').addEventListener('input', function (e) {
+            let val = e.target.value.replace(/\D/g, ''); // nur Ziffern behalten
+            if (val.length > 2) {
+                val = val.slice(0, 2) + '-' + val.slice(2, 7);
+            }
+            e.target.value = val;
+        });
+        
+        document.addEventListener('DOMContentLoaded', function () {
+            // Radio Buttons für Mitglied/Gast
+            const memberRadios = document.querySelectorAll('input[name="member_type"]');
+            const memberNumberWrapper = document.getElementById('member-number-wrapper');
+            const memberNumberInput = document.getElementById('member_number');
+    
+            function updateMemberNumberField() {
+                const selected = document.querySelector('input[name="member_type"]:checked')?.value;
+    
+                if (selected === 'guest') {
+                    memberNumberWrapper.classList.add('hidden');
+                    memberNumberInput.required = false;
+                    memberNumberInput.value = '';
+                } else {
+                    memberNumberWrapper.classList.remove('hidden');
+                    memberNumberInput.required = true;
+                }
+            }
+    
+            memberRadios.forEach(function (radio) {
+                radio.addEventListener('change', updateMemberNumberField);
+            });
+    
+            updateMemberNumberField();
+    
+            // Alterslogik für Aufsicht und PDF
+            const birthDateInput = document.getElementById('birth_date');
+            const minorNote = document.getElementById('minor-note');
+            const pdfLink = document.getElementById('minor-pdf-link');
+            const supervisionWrapper = document.getElementById('supervision-wrapper');
+            const supervisionCheckbox = document.getElementById('supervision_confirmed');
+    
+            function updateAgeRules() {
+                if (!birthDateInput || !birthDateInput.value) {
+                    minorNote.classList.add('hidden');
+                    pdfLink.classList.add('hidden');
+                    supervisionWrapper.classList.add('hidden');
+                    supervisionCheckbox.required = false;
+                    supervisionCheckbox.checked = false;
+                    return;
+                }
+    
+                const birthDate = new Date(birthDateInput.value);
+                const today = new Date();
+    
+                let age = today.getFullYear() - birthDate.getFullYear();
+                const monthDiff = today.getMonth() - birthDate.getMonth();
+    
+                if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                    age--;
+                }
+    
+                if (age < 14) {
+                    minorNote.classList.add('hidden');
+                    pdfLink.classList.add('hidden');
+                    supervisionWrapper.classList.remove('hidden');
+                    supervisionCheckbox.required = true;
+                } else if (age < 18) {
+                    minorNote.classList.remove('hidden');
+                    pdfLink.classList.remove('hidden');
+                    supervisionWrapper.classList.add('hidden');
+                    supervisionCheckbox.required = false;
+                    supervisionCheckbox.checked = false;
+                } else {
+                    minorNote.classList.add('hidden');
+                    pdfLink.classList.add('hidden');
+                    supervisionWrapper.classList.add('hidden');
+                    supervisionCheckbox.required = false;
+                    supervisionCheckbox.checked = false;
+                }
+            }
+    
+            birthDateInput?.addEventListener('change', updateAgeRules);
+            updateAgeRules();
+    
+            // Fix: pageshow feuert nach bfcache-Wiederherstellung, wenn der Browser
+            // den Formularstatus bereits zurückgesetzt hat → UI-Zustand neu anwenden
+            window.addEventListener('pageshow', function () { // ← NEU
+                updateMemberNumberField();                    // ← NEU
+                updateAgeRules();                             // ← NEU
+            });                                               // ← NEU
+        });
+    </script>
+
+</body>
+</html>
+````
+
+## File: app/Http/Controllers/RegistrationController.php
+````php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Member;
+use App\Models\Checkin;
+use App\Models\Registration;
+use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
+
+class RegistrationController extends Controller
+{
+    public function create(Request $request)
+    {
+        $request->session()->put('register_form_started_at', now()->timestamp);
+        return view('register');
+    }
+
+    public function store(Request $request)
+    {
+        // Honeypot-Spam-Schutz
+        if (filled($request->input('website')) || filled($request->input('fax_number'))) {
+            \Log::warning('Spam blockiert: Honeypot-Feld ausgefüllt', [
+                'ip' => $request->ip(),
+                'ua' => $request->userAgent(),
+            ]);
+            throw ValidationException::withMessages([
+                'first_name' => 'Die Registrierung konnte nicht verarbeitet werden. Bitte versuche es erneut.',
+            ]);
+        }
+
+        $formStartedAt = (int) $request->session()->get('register_form_started_at', 0);
+        $secondsTaken  = now()->timestamp - $formStartedAt;
+        if ($formStartedAt > 0 && $secondsTaken < 3) {
+            \Log::warning('Spam blockiert: Formular zu schnell abgesendet', [
+                'ip'           => $request->ip(),
+                'ua'           => $request->userAgent(),
+                'secondstaken' => $secondsTaken,
+            ]);
+            throw ValidationException::withMessages([
+                'first_name' => 'Die Registrierung konnte nicht verarbeitet werden. Bitte versuche es erneut.',
+            ]);
+        }
+
+        $validated = $request->validate([
+            'first_name'          => 'required|string|max:255',
+            'last_name'           => 'required|string|max:255',
+            'birth_date'          => 'required|date|after_or_equal:1900-01-01|before_or_equal:today',
+            'email'              => 'nullable|email|max:255',
+            'member_type'         => 'required|in:member,guest',
+            'member_number'       => [
+                'required_if:member_type,member',
+                'nullable',
+                'string',
+                // ✅ NEU: Format XX-XXXXX erzwingen
+                'regex:/^\d{2}-\d{5}$/',
+            ],
+            'waiver_accepted'     => 'required|accepted',
+            'rules_accepted'     => 'required|accepted',
+            'supervision_confirmed' => 'nullable|boolean',
+            // Honeypot-Felder
+            'hp_time'             => 'required|integer',
+            'website'            => 'nullable|max:0',
+            'fax_number'          => 'nullable|max:0',
+        ], [
+            'birthdate.required'   => 'Das Geburtsdatum ist erforderlich, um doppelte Registrierungen zu vermeiden.',
+            // ✅ NEU: Fehlermeldung für Format-Validierung
+            'member_number.regex'   => 'Die Mitgliedsnummer muss im Format XX-XXXXX eingegeben werden (z.B. 12-34567).',
+        ]);
+
+        // Freitextfelder bereinigen
+        $validated['first_name']    = strip_tags($validated['first_name']);
+        $validated['last_name']     = strip_tags($validated['last_name']);
+        $validated['member_number'] = isset($validated['member_number'])
+            ? strip_tags($validated['member_number'])
+            : null;
+
+        $birthDate       = Carbon::parse($validated['birth_date']);
+        $age             = $birthDate->age;
+        $needsSupervision   = $age < 14;
+        $needsParentConsent = $age >= 14 && $age < 18;
+
+        if ($needsSupervision && !$request->boolean('supervision_confirmed')) {
+            throw ValidationException::withMessages([
+                'supervision_confirmed' => 'Für Kinder unter 14 Jahren muss bestätigt werden, dass Klettern nur unter Aufsicht erfolgt.',
+            ]);
+        }
+
+        // Mitglieds-Verifikation gegen Mitgliederliste
+        $member = null;
+        if ($validated['member_type'] === 'member') {
+            $member = DB::table('members')
+                ->where('member_number', $validated['member_number'])
+                ->first();
+
+            if ($member) {
+                $lastNameInput = strtolower(trim($validated['last_name']));
+                $lastNameCsv   = strtolower(trim($member->last_name ?? ''));
+
+                // ✅ NEU: Geburtsdatum zusätzlich abgleichen
+                $birthInput = Carbon::parse($validated['birth_date'])->toDateString();
+                $birthCsv   = $member->birth_date
+                    ? Carbon::parse($member->birth_date)->toDateString()
+                    : null;
+
+                if ($lastNameInput !== $lastNameCsv || $birthInput !== $birthCsv) {
+                    throw ValidationException::withMessages([
+                        'member_number' => 'Die Mitgliedsnummer stimmt nicht mit den angegebenen Daten (Nachname + Geburtsdatum) überein. Bitte prüfen!',
+                    ]);
+                }
+            }
+        }
+
+        // Duplikat-Suche
+        $query = Registration::query();
+        if ($validated['member_type'] === 'member' && !empty($validated['member_number'])) {
+            $query->where('member_number', $validated['member_number']);
+        } else {
+            $query->whereRaw('LOWER(last_name) = ?', [strtolower(trim($validated['last_name']))])
+                  ->where('birth_date', $validated['birth_date']);
+        }
+        $existingReg = $query->first();
+
+        // FIX 1: Gast-Upgrade nach Name/Birthdate suchen, falls Mitglied kein Treffer
+        if (!$existingReg && $validated['member_type'] === 'member') {
+            $existingReg = Registration::whereRaw('LOWER(last_name) = ?', [strtolower(trim($validated['last_name']))])
+                ->where('birth_date', $validated['birth_date'])
+                ->where('member_type', 'guest')
+                ->first();
+        }
+
+        // Zugangsstatus bestimmen
+        $accessStatus = 'red';
+        $accessReason = 'Unbekannt';
+        $paymentStatus = 'paid';
+
+        if ($validated['member_type'] === 'guest') {
+            $validated['member_number'] = null;
+            if (!$existingReg) {
+                $accessStatus = 'blue';
+                $accessReason = 'Schnupperklettern';
+            } else {
+                $accessStatus = 'orange';
+                $accessReason = 'Kulanz: ' . $existingReg->manualexceptionreason;
+            }
+        } elseif ($validated['member_type'] === 'member') {
+            if (!$member) {
+                $accessStatus  = 'orange';
+                $accessReason  = 'Mitglied noch unbestätigt / nicht in Datenbank';
+                $paymentStatus = 'overdue';
+            } elseif (($member->membershipstatus ?? null) !== 'active') {
+                $accessStatus  = 'red';
+                $accessReason  = 'Mitgliedschaft inaktiv';
+                $paymentStatus = 'overdue';
+            } elseif (($member->payment_status ?? null) === 'open') {
+                $accessStatus  = 'orange';
+                $accessReason  = 'Beitrag offen';
+                $paymentStatus = 'overdue';
+            } else {
+                $accessStatus = 'green';
+                $accessReason = 'Mitgliedschaft aktiv & bezahlt';
+            }
+        }
+
+        // Aufsicht-Logik
+        if ($needsSupervision) {
+            if ($validated['member_type'] === 'guest') {
+                $accessReason .= ' · Unter 14 – Aufsicht erforderlich';
+            } else {
+                if ($request->boolean('supervision_confirmed')) {
+                    $accessStatus = 'green';
+                    $accessReason = 'Unter 14 – Aufsicht erforderlich';
+                } else {
+                    $accessStatus = 'orange';
+                    $accessReason = 'Unter 14 – Aufsicht erforderlich';
+                }
+            }
+        }
+
+        if ($needsParentConsent) {
+            if ($validated['member_type'] === 'guest') {
+                $accessReason .= ' · Jugendlicher (14–17)';
+            } else {
+                $accessStatus = 'green';
+                $accessReason = 'Jugendlicher (14–17)';
+            }
+        }
+
+        // GAST-BLOCK / Upgrade-Logik
+        if ($existingReg) {
+            // FIX 2: Upgrade-Logik Gast → Mitglied erlauben
+            $isUpgrade = $existingReg->member_type === 'guest' && $validated['member_type'] === 'member';
+
+            if (!$isUpgrade) {
+                if ($existingReg->member_type === 'guest') {
+                    if (($existingReg->trial_visits_count ?? 0) >= 2) {
+                        throw ValidationException::withMessages([
+                            'first_name' => 'Du hast das Schnupper-Limit bereits vollständig ausgeschöpft. Eine weitere Registrierung als Gast ist nicht möglich.',
+                        ]);
+                    }
+                    $hasKulanz = $existingReg->manual_exception_until &&
+                                 $existingReg->manual_exception_until->isFuture();
+                    if (!$hasKulanz) {
+                        throw ValidationException::withMessages([
+                            'first_name' => 'Du bist bereits als Schnuppergast registriert. Ein zweites Mal ist nur nach Absprache mit dem Hallendienst möglich.',
+                        ]);
+                    }
+                } else {
+                    return redirect('verify/' . $existingReg->qr_token)
+                        ->with('success', 'Du warst bereits registriert! Hier ist dein aktueller Status.');
+                }
+            }
+
+            // FIX 3: member_type & member_number mitschreiben
+            $existingReg->update([
+                'member_type'              => $validated['member_type'],
+                'member_number'            => $validated['member_number'] ?? null,
+                'waiver_accepted'          => true,
+                'birth_date'               => $validated['birth_date'],
+                'email'                   => $validated['email'] ?? null,
+                'access_status'            => $accessStatus,
+                'access_reason'            => $accessReason,
+                'needs_supervision'        => $needsSupervision,
+                'needs_parent_consent'      => $needsParentConsent,
+                'parent_consent_received'   => $needsParentConsent ? $existingReg->parent_consent_received : false,
+                'parent_consent_received_at' => $needsParentConsent ? $existingReg->parent_consent_received_at : null,
+                'supervision_confirmed'    => $needsSupervision
+                    ? $request->boolean('supervision_confirmed')
+                    : false,
+            ]);
+            $registration = $existingReg;
+        } else {
+            $registration = Registration::create([
+                'first_name'               => $validated['first_name'],
+                'last_name'                => $validated['last_name'],
+                'birth_date'               => $validated['birth_date'],
+                'email'                   => $validated['email'] ?? null,
+                'member_type'              => $validated['member_type'],
+                'member_number'            => $validated['member_number'] ?? null,
+                'waiver_accepted'          => true,
+                'waiver_version'           => 'v1',
+                'payment_status'           => $paymentStatus,
+                'access_status'            => $accessStatus,
+                'access_reason'            => $accessReason,
+                'trial_visits_count'        => 0,
+                'needs_supervision'        => $needsSupervision,
+                'needs_parent_consent'      => $needsParentConsent,
+                'parent_consent_received'   => false,
+                'parent_consent_received_at' => null,
+                'supervision_confirmed'    => $needsSupervision
+                    ? $request->boolean('supervision_confirmed')
+                    : false,
+                'qr_token'                 => (string) Str::uuid(),
+            ]);
+        }
+
+        return redirect('verify/' . $registration->qr_token)
+            ->with('success', 'Registrierung erfolgreich!');
+    }
+
+    public function verify(string $token)
+    {
+        $registration = Registration::withCurrentCheckin()
+            ->where('qr_token', $token)
+            ->firstOrFail();
+
+        return view('verify', compact('registration'));
+    }
+
+    public function checkin(Request $request, string $token)
+    {
+        $registration = Registration::withCurrentCheckin()
+            ->where('qr_token', $token)
+            ->first();
+
+        if (!$registration) {
+            $msg = 'QR-Code ungültig oder abgelaufen.';
+            return $request->expectsJson()
+                ? response()->json(['success' => false, 'message' => $msg], 404)
+                : abort(404, $msg);
+        }
+
+        $hasActiveKulanz = $registration->manual_exception_until &&
+                           $registration->manual_exception_until->isFuture();
+        $needsKulanz = in_array($registration->access_status, ['red', 'orange']) && !$hasActiveKulanz;
+
+        if ($needsKulanz) {
+            $statusText = strtoupper($registration->access_status);
+            $message    = "Check-in blockiert! Status ist {$statusText}. Kulanz erforderlich: "
+                        . ($registration->access_reason ?? 'Unbekannt') . '.';
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 403);
+            }
+            return redirect()->route('verify', $registration->qr_token)->withErrors($message);
+        }
+
+        if ($registration->currentCheckin) {
+            $message = $registration->first_name . ' ' . $registration->last_name
+                . ' ist bereits seit '
+                . $registration->currentCheckin->checked_in_at->format('H:i')
+                . ' Uhr eingecheckt.';
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 422);
+            }
+            return redirect()->route('verify', $registration->qr_token)->withErrors($message);
+        }
+
+        // Nur green/blue dürfen direkt einchecken
+        if (!in_array($registration->access_status, ['green', 'blue'])) {
+            $message = $registration->access_status === 'red'
+                ? 'Kein Zutritt erlaubt.'
+                : 'Zutritt erfordert manuelle Freigabe durch den Hallendienst.';
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 403);
+            }
+            return redirect()->back()->withErrors('Check-in verweigert: ' . $message);
+        }
+
+        Checkin::create([
+            'registration_id' => $registration->id,
+            'checked_in_at'     => now(),
+        ]);
+        $registration->increment('trial_visits_count');
+
+        $message = $registration->first_name . ' ' . $registration->last_name
+                 . ' wurde erfolgreich eingecheckt.';
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => $message]);
+        }
+        return redirect()->route('verify', $registration->qr_token)->with('success', $message);
+    }
+}
 ````
 
 ## File: routes/web.php

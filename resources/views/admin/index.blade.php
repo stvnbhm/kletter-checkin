@@ -150,7 +150,7 @@
                                     <td class="px-4 py-3 font-medium text-gray-800">
                                         {{ $reg->first_name }} {{ $reg->last_name }}
                                         @if ($reg->birth_date)
-                                            <div class="text-xs text-gray-400">{{ $reg->birth_date->format('d.m.Y') }}</div>
+                                            <div class="text-xs text-gray-400">{{ $reg->birth_date?->format('d.m.Y') ?? '—' }}</div>
                                         @endif
                                     </td>
                                     <td class="px-4 py-3">

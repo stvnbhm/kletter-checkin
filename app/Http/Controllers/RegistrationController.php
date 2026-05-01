@@ -66,7 +66,7 @@ class RegistrationController extends Controller
             'website'            => 'nullable|max:0',
             'fax_number'          => 'nullable|max:0',
         ], [
-            'birthdate.required'   => 'Das Geburtsdatum ist erforderlich, um doppelte Registrierungen zu vermeiden.',
+            'birth_date.required'   => 'Das Geburtsdatum ist erforderlich, um doppelte Registrierungen zu vermeiden.',
             // ✅ NEU: Fehlermeldung für Format-Validierung
             'member_number.regex'   => 'Die Mitgliedsnummer muss im Format XX-XXXXX eingegeben werden (z.B. 12-34567).',
         ]);
