@@ -95,19 +95,28 @@ class RegistrationController extends Controller
             $member = DB::table('members')
                 ->where('member_number', $validated['member_number'])
                 ->first();
-
+        
+            $lastNameInput = strtolower(trim($validated['last_name']));
+            $birthInput    = Carbon::parse($validated['birth_date'])->toDateString();
+        
             if ($member) {
-                $lastNameInput = strtolower(trim($validated['last_name']));
-                $lastNameCsv   = strtolower(trim($member->last_name ?? ''));
-
-                // ✅ NEU: Geburtsdatum zusätzlich abgleichen
-                $birthInput = Carbon::parse($validated['birth_date'])->toDateString();
-                $birthCsv   = $member->birth_date
+                $lastNameDb = strtolower(trim($member->last_name ?? ''));
+                $birthDb    = $member->birth_date
                     ? Carbon::parse($member->birth_date)->toDateString()
                     : null;
-
-                if ($lastNameInput !== $lastNameCsv || $birthInput !== $birthCsv) {
-                    
+        
+                if ($lastNameInput !== $lastNameDb || $birthInput !== $birthDb) {
+                    throw ValidationException::withMessages([
+                        'member_number' => 'Die Mitgliedsnummer stimmt nicht mit den angegebenen Daten (Nachname + Geburtsdatum) überein. Bitte prüfen!',
+                    ]);
+                }
+            } else {
+                $nameBirthMatch = DB::table('members')
+                    ->whereRaw('LOWER(last_name) = ?', [$lastNameInput])
+                    ->whereDate('birth_date', $birthInput)
+                    ->exists();
+        
+                if ($nameBirthMatch) {
                     throw ValidationException::withMessages([
                         'member_number' => 'Die Mitgliedsnummer stimmt nicht mit den angegebenen Daten (Nachname + Geburtsdatum) überein. Bitte prüfen!',
                     ]);
