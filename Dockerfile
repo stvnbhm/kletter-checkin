@@ -50,14 +50,14 @@ COPY . .
 
 # Dump optimized autoload
 RUN git config --global --add safe.directory /var/www/html && \
-    cp .env.example .env && \
-    php artisan key:generate && \
     composer dump-autoload --no-dev --optimize && \
-    php artisan package:discover --ansi && \
-    rm .env
+    php artisan package:discover --ansi 2>/dev/null || true
 
 # Set permissions
 RUN chown -R www-data:www-data \
+    /var/www/html/storage \
+    /var/www/html/bootstrap/cache && \
+    chmod -R 775 \
     /var/www/html/storage \
     /var/www/html/bootstrap/cache
 
