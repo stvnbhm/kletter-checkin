@@ -50,7 +50,11 @@ COPY . .
 
 # Dump optimized autoload
 RUN git config --global --add safe.directory /var/www/html && \
-    composer dump-autoload --no-dev --optimize
+    cp .env.example .env && \
+    php artisan key:generate && \
+    composer dump-autoload --no-dev --optimize && \
+    php artisan package:discover --ansi && \
+    rm .env
 
 # Set permissions
 RUN chown -R www-data:www-data \
