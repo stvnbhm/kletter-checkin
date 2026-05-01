@@ -107,12 +107,7 @@ class RegistrationController extends Controller
                     : null;
 
                 if ($lastNameInput !== $lastNameCsv || $birthInput !== $birthCsv) {
-                    \Log::debug('Member check', [
-    'input_last' => $lastNameInput,
-    'csv_last' => $lastNameCsv,
-    'input_birth' => $birthInput,
-    'csv_birth' => $birthCsv,
-]);
+                    
                     throw ValidationException::withMessages([
                         'member_number' => 'Die Mitgliedsnummer stimmt nicht mit den angegebenen Daten (Nachname + Geburtsdatum) überein. Bitte prüfen!',
                     ]);
@@ -157,11 +152,11 @@ class RegistrationController extends Controller
                 $accessStatus  = 'orange';
                 $accessReason  = 'Mitglied noch unbestätigt / nicht in Datenbank';
                 $paymentStatus = 'overdue';
-            } elseif (($member->membershipStatus ?? null) !== 'active') {
+            } elseif (($member->membership_status ?? null) !== 'active') {
                 $accessStatus  = 'red';
                 $accessReason  = 'Mitgliedschaft inaktiv';
                 $paymentStatus = 'overdue';
-            } elseif (($member->paymentStatus ?? null) === 'open') {
+            } elseif (($member->payment_status ?? null) === 'open') {
                 $accessStatus  = 'orange';
                 $accessReason  = 'Beitrag offen';
                 $paymentStatus = 'overdue';
