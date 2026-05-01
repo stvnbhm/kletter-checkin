@@ -460,7 +460,7 @@ echo "Update fertig!"
 | Artisan ausführen | `docker compose exec app php artisan <befehl>` |
 | Backup manuell | `docker compose exec app php artisan backup:database` |
 | Backup-Dateien | `ls -lh backups/` |
-| Mitglieder aus DB entfernen | `docker compose exec app php artisan tinker --execute="DB::table('members')->truncate(); echo 'Done‘;“` |
+| Mitglieder aus DB entfernen | `‌docker compose exec app php artisan tinker --execute="DB::table('members')->truncate(); echo 'Done';"` |
 
 ---
 
