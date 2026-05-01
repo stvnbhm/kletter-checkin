@@ -267,9 +267,10 @@
                                     Eingecheckt {{ $currentCheckin->checked_in_at->format('H:i') }} Uhr
                                 </span>
                             @elseif ($isHardBlocked)
-                                <span class="text-xs font-semibold text-red-600">
-                                    🚫 {{ $isTrialMaxReached ? 'Schnupperlimit ausgeschöpft (3/3)' : $registration->access_reason }}
-                                </span>
+                                <button type="button" disabled
+                                    class="w-full inline-flex items-center justify-center border border-gray-200 bg-gray-100 text-gray-400 rounded-lg px-3 py-2 text-sm font-semibold cursor-not-allowed">
+                                    Check-in
+                                </button>
                             @elseif ($needsKulanz)
                                 <form method="POST" action="{{ route('staff.kulanz-checkin', $registration) }}"
                                     class="flex flex-col gap-2">
@@ -277,11 +278,11 @@
                                     <span class="text-xs font-semibold {{ $hintColor }}">
                                         {{ $hintIcon }} {{ $kulanzHint }}
                                     </span>
-                                    <input type="text" name="reason" placeholder="Grund" required
+                                    <input type="text" name="reason" placeholder="Kulanzgrund" required
                                         class="block w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white text-gray-900 focus:border-amber-500 focus:ring-amber-500">
                                     <button type="submit"
                                         class="self-start text-xs font-semibold text-amber-700 underline bg-transparent border-none p-0 cursor-pointer hover:text-amber-900">
-                                        Kulanz gewähren
+                                        Checkin mit Kulanz
                                     </button>
                                 </form>
                             @else
@@ -442,9 +443,10 @@
                                                 Eingecheckt {{ $currentCheckin->checked_in_at->format('H:i') }} Uhr
                                             </span>
                                         @elseif ($isHardBlocked)
-                                            <span class="text-xs font-semibold text-red-600">
-                                                🚫 {{ $isTrialMaxReached ? 'Schnupperlimit ausgeschöpft (3/3)' : $registration->access_reason }}
-                                            </span>
+                                            <button type="button" disabled
+                                                class="inline-flex items-center justify-center border border-gray-200 bg-gray-100 text-gray-400 rounded-lg px-3 py-2 text-sm font-semibold cursor-not-allowed">
+                                                Check-in
+                                            </button>
                                         @elseif ($needsKulanz)
                                             <div class="flex flex-col gap-1.5">
                                                 <span class="text-xs font-semibold {{ $hintColor }}">
@@ -454,11 +456,11 @@
                                                     class="flex flex-col gap-1.5">
                                                     @csrf
                                                     <input type="text" name="reason"
-                                                        placeholder="Grund ..." required
+                                                        placeholder="Grund für Kulanz ..." required
                                                         class="block w-full max-w-[180px] border border-gray-300 rounded-md px-2 py-1.5 text-xs bg-white text-gray-900 focus:border-amber-500 focus:ring-amber-500">
                                                     <button type="submit"
                                                         class="self-start text-xs font-semibold text-amber-700 underline bg-transparent border-none p-0 cursor-pointer hover:text-amber-900">
-                                                        Kulanz gewähren
+                                                        Checkin mit Kulanz
                                                     </button>
                                                 </form>
                                             </div>
