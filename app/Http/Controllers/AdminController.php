@@ -152,6 +152,15 @@ class AdminController extends Controller
                     ]
                 );
                 
+                // Gast -> Mitglied automatisch umstellen
+                Registration::where('member_type', 'guest')
+                    ->whereRaw('LOWER(last_name) = ?', [strtolower(trim((string) ($data['Nachname'] ?? '')))])
+                    ->where('birth_date', $birthDate?->format('Y-m-d'))
+                    ->update([
+                        'member_type' => 'member',
+                        'member_number' => $memberNumber,
+                    ]);
+                
                 // Registrierungen synchronisieren
                 Registration::where('member_number', $memberNumber)->update([
                     'payment_status' => $paymentStatus,
