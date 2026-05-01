@@ -144,18 +144,18 @@ class RegistrationController extends Controller
                 $accessReason = 'Schnupperklettern';
             } else {
                 $accessStatus = 'orange';
-                $accessReason = 'Kulanz: ' . $existingReg->manualexceptionreason;
+                $accessReason = 'Kulanz: ' . $existingReg->manual_exception_reason;
             }
         } elseif ($validated['member_type'] === 'member') {
             if (!$member) {
                 $accessStatus  = 'orange';
                 $accessReason  = 'Mitglied noch unbestätigt / nicht in Datenbank';
                 $paymentStatus = 'overdue';
-            } elseif (($member->membership_status ?? null) !== 'active') {
+            } elseif (($member->membershipStatus ?? null) !== 'active') {
                 $accessStatus  = 'red';
                 $accessReason  = 'Mitgliedschaft inaktiv';
                 $paymentStatus = 'overdue';
-            } elseif (($member->payment_status ?? null) === 'open') {
+            } elseif (($member->paymentStatus ?? null) === 'open') {
                 $accessStatus  = 'orange';
                 $accessReason  = 'Beitrag offen';
                 $paymentStatus = 'overdue';
