@@ -260,6 +260,15 @@ class AdminController extends Controller
             }
         }
     }
+    
+    // ── Inaktive Mitglieder löschen ────────────────────────
+    public function deleteInactiveMembers(): RedirectResponse
+    {
+        $ids = Registration::where('membership_status', 'inactive')->pluck('id');
+        Checkin::whereIn('registration_id', $ids)->delete();
+        Registration::whereIn('id', $ids)->delete();
+        return redirect()->route('admin.index')->with('success', count($ids) . ' inaktive Mitglieder gelöscht.');
+    }
 
     // ── Checkins CSV-Export ────────────────────────────────
     public function exportCheckins(Request $request)

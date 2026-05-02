@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Admin | Kletterdom</title>
-
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="font-sans antialiased bg-gray-50 text-gray-900">
@@ -15,9 +14,7 @@
     <header class="bg-white shadow">
         <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between">
-                <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-                    🛠️ Admin-Bereich
-                </h2>
+                <h2 class="font-semibold text-xl text-gray-800 leading-tight">🛠️ Admin-Bereich</h2>
                 <span class="text-sm text-gray-500">Hallenverwaltung</span>
             </div>
         </div>
@@ -38,7 +35,7 @@
                 </div>
             @endif
 
-           {{-- ── KPI-Karten ──────────────────────────────────────── --}}
+            {{-- ── KPI-Karten ──────────────────────────────────────── --}}
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
                     <div class="text-3xl font-bold text-teal-600">{{ $stats['checked_in_today'] }}</div>
@@ -57,7 +54,7 @@
                     <div class="text-sm text-gray-500 mt-1">Inaktive Mitglieder</div>
                 </div>
             </div>
-            
+
             {{-- ── Hallenauslastung Chart ───────────────────────────── --}}
             <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                 <h3 class="text-lg font-semibold text-gray-700 mb-4">📊 Hallenauslastung – letzte 30 Tage</h3>
@@ -70,70 +67,97 @@
             <div class="grid md:grid-cols-2 gap-6">
 
                 {{-- Mitglieder CSV-Import --}}
-                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                    <h3 class="text-lg font-semibold text-gray-700 mb-1">📥 Mitglieder importieren</h3>
-                    <p class="mt-1 text-xs text-gray-500">
-                        CSV-Datei mit Spalten:
-                        <code class="font-mono">Mitgliedsnummer; Nachname; Vorname; Email; Status; Betrag offen; Geburtsdatum</code>
-                    </p>
-                    <form action="{{ route('admin.importMembers') }}" method="POST" enctype="multipart/form-data" class="space-y-3">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col gap-4">
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-700">📥 Mitglieder importieren</h3>
+                        <p class="mt-1 text-xs text-gray-400 leading-relaxed">
+                            CSV-Spalten:
+                            <code class="font-mono bg-gray-100 px-1 py-0.5 rounded text-gray-600">
+                                Mitgliedsnummer; Nachname; Vorname; Email; Status; Betrag offen; Geburtsdatum
+                            </code>
+                        </p>
+                    </div>
+
+                    <form id="importForm"
+                          action="{{ route('admin.importMembers') }}"
+                          method="POST"
+                          enctype="multipart/form-data"
+                          class="flex flex-col gap-4">
                         @csrf
-                        <div>
-                            <label class="block text-sm font-medium text-gray-600 mb-1">CSV-Datei wählen</label>
+
+                        {{-- Datei-Picker --}}
+                        <div class="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                            <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                                CSV-Datei wählen
+                            </label>
                             <input type="file" name="members_csv" accept=".csv,.txt"
                                 class="block w-full text-sm text-gray-500
-                                       file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0
+                                       file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0
                                        file:text-sm file:font-semibold file:bg-teal-50 file:text-teal-700
-                                       hover:file:bg-teal-100 border border-gray-200 rounded-lg p-1">
+                                       hover:file:bg-teal-100">
                             @error('members_csv')
                                 <p class="text-red-500 text-xs mt-1">{{ $message }}</p>
                             @enderror
                         </div>
-                        
+
+                        {{-- Bestätigungs-Block (nur sichtbar wenn nötig) --}}
                         @if (session('confirm_missing_count_required'))
-                                <div class="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-                                    Achtung: {{ session('confirm_missing_count_required') }} bestehende Mitglieder fehlen in der CSV.
-                                    Um diese auf „inaktiv“ zu setzen, bitte die Zahl unten exakt eingeben und den Import erneut starten.
-                                </div>
-                            @endif
-                            
-                            <div class="mt-4">
-                                <label for="confirm_missing_count" class="block text-sm font-medium text-gray-700">
-                                    Anzahl fehlender Mitglieder bestätigen
-                                </label>
-                                <input
-                                    type="number"
-                                    name="confirm_missing_count"
-                                    id="confirm_missing_count"
-                                    value="{{ old('confirm_missing_count') }}"
-                                    class="mt-1 block w-48 rounded-md border-gray-300 shadow-sm"
-                                    placeholder="z. B. 12"
-                                >
-                                <input type="hidden" name="stored_csv_path" value="{{ old('stored_csv_path', session('stored_csv_path')) }}">
+                            <div class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                                ⚠️ <strong>{{ session('confirm_missing_count_required') }} Mitglieder</strong>
+                                fehlen in der CSV und würden auf „inaktiv" gesetzt.
+                                Bitte die Anzahl unten bestätigen und erneut importieren.
                             </div>
-                                                
-                        <button type="submit"
-                            class="w-full bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold py-2 px-4 rounded-lg transition">
-                            Importieren
+                        @endif
+
+                        <div class="flex flex-col gap-1">
+                            <label for="confirm_missing_count"
+                                   class="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                Fehlende Mitglieder bestätigen
+                            </label>
+                            <input type="number"
+                                   name="confirm_missing_count"
+                                   id="confirm_missing_count"
+                                   value="{{ old('confirm_missing_count') }}"
+                                   placeholder="z. B. 12"
+                                   class="w-36 border border-gray-300 rounded-md px-3 py-1.5 text-sm shadow-sm focus:ring-teal-400 focus:border-teal-400">
+                            <input type="hidden" name="stored_csv_path"
+                                   value="{{ old('stored_csv_path', session('stored_csv_path')) }}">
+                        </div>
+
+                        {{-- Submit-Button mit Doppelklick-Schutz --}}
+                        <button id="importBtn" type="submit"
+                            class="w-full bg-teal-600 hover:bg-teal-700 disabled:bg-teal-300 disabled:cursor-not-allowed
+                                   text-white text-sm font-semibold py-2 px-4 rounded-lg transition flex items-center justify-center gap-2">
+                            <span id="importBtnText">Importieren</span>
+                            <svg id="importSpinner" class="hidden animate-spin h-4 w-4 text-white"
+                                 xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10"
+                                        stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor"
+                                      d="M4 12a8 8 0 018-8v8H4z"></path>
+                            </svg>
                         </button>
                     </form>
                 </div>
 
                 {{-- Check-ins CSV-Export --}}
-                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                    <h3 class="text-lg font-semibold text-gray-700 mb-1">📤 Check-ins exportieren</h3>
-                    <p class="text-sm text-gray-400 mb-4">
-                        Exportiert alle Check-ins im gewählten Zeitraum als CSV (Excel-kompatibel, UTF-8 BOM, Semikolon-getrennt).
-                    </p>
-                    <form action="{{ route('admin.exportCheckins') }}" method="GET" class="space-y-3">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col gap-4">
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-700">📤 Check-ins exportieren</h3>
+                        <p class="text-sm text-gray-400">
+                            Exportiert alle Check-ins im gewählten Zeitraum als CSV
+                            (Excel-kompatibel, UTF-8 BOM, Semikolon-getrennt).
+                        </p>
+                    </div>
+                    <form action="{{ route('admin.exportCheckins') }}" method="GET" class="flex flex-col gap-4">
                         <div class="grid grid-cols-2 gap-3">
                             <div>
-                                <label class="block text-sm font-medium text-gray-600 mb-1">Von</label>
+                                <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Von</label>
                                 <input type="date" name="from" value="{{ now()->subDays(30)->toDateString() }}"
                                     class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-400 focus:outline-none">
                             </div>
                             <div>
-                                <label class="block text-sm font-medium text-gray-600 mb-1">Bis</label>
+                                <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Bis</label>
                                 <input type="date" name="to" value="{{ now()->toDateString() }}"
                                     class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-400 focus:outline-none">
                             </div>
@@ -143,6 +167,25 @@
                             CSV herunterladen
                         </button>
                     </form>
+
+                    {{-- ── Inaktive Mitglieder löschen ── --}}
+                    <div class="border-t border-gray-100 pt-4 mt-auto">
+                        <h4 class="text-sm font-semibold text-gray-600 mb-1">🗑️ Inaktive Mitglieder entfernen</h4>
+                        <p class="text-xs text-gray-400 mb-3">
+                            Löscht alle Registrierungen mit <code class="font-mono bg-gray-100 px-1 rounded">membership_status = inactive</code>
+                            dauerhaft aus der Datenbank inkl. ihrer Check-ins.
+                        </p>
+                        <form action="{{ route('admin.deleteInactiveMembers') }}" method="POST"
+                              onsubmit="return confirm('Alle inaktiven Mitglieder ({{ $stats['inactive_members'] }}) wirklich dauerhaft löschen? Diese Aktion kann nicht rückgängig gemacht werden.')">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit"
+                                class="w-full bg-red-50 hover:bg-red-100 border border-red-200 text-red-700
+                                       text-sm font-semibold py-2 px-4 rounded-lg transition">
+                                {{ $stats['inactive_members'] }} inaktive Mitglieder löschen
+                            </button>
+                        </form>
+                    </div>
                 </div>
             </div>
 
@@ -176,12 +219,8 @@
                                             <div class="text-xs text-gray-400">{{ $reg->birth_date?->format('d.m.Y') ?? '—' }}</div>
                                         @endif
                                     </td>
-                                    <td class="px-4 py-3">
-                                        @if ($reg->member_type === 'member')
-                                            <span class="px-4 py-3 text-gray-500">Mitglied</span>
-                                        @else
-                                            <span class="px-4 py-3 text-gray-500">Gast</span>
-                                        @endif
+                                    <td class="px-4 py-3 text-gray-500">
+                                        {{ $reg->member_type === 'member' ? 'Mitglied' : 'Gast' }}
                                     </td>
                                     <td class="px-4 py-3 text-gray-500">{{ $reg->member_number ?? '–' }}</td>
                                     <td class="px-4 py-3">
@@ -205,8 +244,7 @@
                                               onsubmit="return confirm('Registrierung von {{ addslashes($reg->first_name . ' ' . $reg->last_name) }} wirklich löschen? Alle Check-ins werden mitgelöscht.')">
                                             @csrf
                                             @method('DELETE')
-                                            <button type="submit"
-                                                class="text-xs text-red-500 hover:text-red-700 hover:underline transition">
+                                            <button type="submit" class="text-xs text-red-500 hover:text-red-700 hover:underline transition">
                                                 Löschen
                                             </button>
                                         </form>
@@ -265,6 +303,17 @@
     {{-- Chart.js --}}
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script>
+        // CSV Import: Doppelklick-Schutz
+        document.getElementById('importForm').addEventListener('submit', function () {
+            const btn     = document.getElementById('importBtn');
+            const text    = document.getElementById('importBtnText');
+            const spinner = document.getElementById('importSpinner');
+            btn.disabled     = true;
+            text.textContent = 'Wird importiert…';
+            spinner.classList.remove('hidden');
+        });
+
+        // Auslastungs-Chart
         const labels = @json($labels);
         const values = @json($values);
 
@@ -275,7 +324,7 @@
                 datasets: [{
                     label: 'Check-ins',
                     data: values,
-                    backgroundColor: 'rgba(13, 148, 136, 0.7)',   // teal-600
+                    backgroundColor: 'rgba(13, 148, 136, 0.7)',
                     borderColor:     'rgba(13, 148, 136, 1)',
                     borderWidth: 1,
                     borderRadius: 4,
