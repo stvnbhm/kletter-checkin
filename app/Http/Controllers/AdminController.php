@@ -108,7 +108,7 @@ class AdminController extends Controller
             }
     
             $imported = 0;
-            $importedMemberNumbers[] = $memberNumber;
+            $importedMemberNumbers = [];
     
             while (($row = fgetcsv($handle, 0, ';')) !== false) {
                 if (count($row) !== count($headers)) {
@@ -124,17 +124,16 @@ class AdminController extends Controller
                 }
     
                 $importedMemberNumbers[] = $memberNumber;
+    
                 $betragOffen = (float) str_replace(',', '.', trim((string) ($data['Betrag offen'] ?? '0')));
                 $paymentStatus = $betragOffen > 0 ? 'overdue' : 'paid';
-                
+    
                 $birthDate = $this->parseCsvDate($data['Geburtsdatum'] ?? null);
                 $exitDate = $this->parseCsvDate($data['Austrittsdatum'] ?? null);
-                
-                // NEU: Status-Spalte direkt auslesen
-                $csvStatus = strtolower(trim((string)($data['Status'] ?? '')));
-                
+    
+                $csvStatus = strtolower(trim((string) ($data['Status'] ?? '')));
                 $inactiveStatuses = ['gelöscht', 'ausgetreten', 'gesperrt', 'inaktiv', 'gekündigt'];
-                
+    
                 $membershipStatus = 'active';
                 if (in_array($csvStatus, $inactiveStatuses, true)) {
                     $membershipStatus = 'inactive';
@@ -154,8 +153,7 @@ class AdminController extends Controller
                         'last_imported_at' => now(),
                     ]
                 );
-                
-                // Gast -> Mitglied automatisch umstellen
+    
                 Registration::where('member_type', 'guest')
                     ->whereRaw('LOWER(last_name) = ?', [strtolower(trim((string) ($data['Nachname'] ?? '')))])
                     ->where('birth_date', $birthDate?->format('Y-m-d'))
@@ -163,12 +161,11 @@ class AdminController extends Controller
                         'member_type' => 'member',
                         'member_number' => $memberNumber,
                     ]);
-                
-                // Registrierungen synchronisieren
+    
                 Registration::where('member_number', $memberNumber)->update([
                     'payment_status' => $paymentStatus,
                 ]);
-                
+    
                 if ($membershipStatus === 'inactive') {
                     Registration::where('member_number', $memberNumber)->update([
                         'access_status' => 'red',
@@ -180,50 +177,47 @@ class AdminController extends Controller
                         'access_reason' => 'Beitrag offen',
                     ]);
                 } else {
-                Registration::where('member_number', $memberNumber)
-                    ->where(function ($q) {
-                        $q->where('access_reason', 'like', '%Mitglied noch unbestätigt / nicht in Datenbank%')
-                          ->orWhere('access_reason', 'like', '%Mitgliedschaft inaktiv%')
-                          ->orWhere('access_reason', 'like', '%Beitrag offen%');
-                    })
-                    ->update([
+                    Registration::where('member_number', $memberNumber)->update([
                         'access_status' => 'green',
                         'access_reason' => 'Mitgliedschaft aktiv & bezahlt',
                     ]);
-            }
+                }
     
                 $imported++;
             }
-            
+    
+            if ($imported === 0) {
+                return redirect()
+                    ->route('admin.index')
+                    ->with('error', 'CSV wurde gelesen, aber es konnten keine Datensätze importiert werden.');
+            }
+    
             $importedMemberNumbers = array_values(array_unique($importedMemberNumbers));
-            
+    
             $missingMemberNumbers = Member::query()
-                ->whereNotIn('member_number', array_unique($importedMemberNumbers))
+                ->whereNotIn('member_number', $importedMemberNumbers)
                 ->pluck('member_number');
-            
+    
             $missingCount = $missingMemberNumbers->count();
-            
+    
             if ($missingCount > 0 && (int) $request->input('confirm_missing_count') !== $missingCount) {
                 return redirect()
                     ->route('admin.index')
                     ->with('warning', "Import abgebrochen: {$missingCount} bestehende Mitglieder fehlen in der CSV. Bitte Import erneut starten und diese Anzahl explizit bestätigen.")
                     ->with('confirm_missing_count_required', $missingCount);
             }
-            
-            Member::whereIn('member_number', $missingMemberNumbers)->update([
-                'membership_status' => 'inactive',
-                'last_imported_at' => now(),
-            ]);
-            
-            Registration::whereIn('member_number', $missingMemberNumbers)->update([
-                'access_status' => 'red',
-                'access_reason' => 'Mitgliedschaft inaktiv',
-            ]);
-            
-            if ($imported === 0) {
-                return redirect()
-                    ->route('admin.index')
-                    ->with('error', 'CSV wurde gelesen, aber es konnten keine Datensätze importiert werden.');
+    
+            if ($missingCount > 0) {
+                Member::whereIn('member_number', $missingMemberNumbers)->update([
+                    'membership_status' => 'inactive',
+                    'last_imported_at' => now(),
+                ]);
+    
+                Registration::whereIn('member_number', $missingMemberNumbers)->update([
+                    'payment_status' => 'overdue',
+                    'access_status' => 'red',
+                    'access_reason' => 'Mitgliedschaft inaktiv',
+                ]);
             }
     
             return redirect()
@@ -234,7 +228,6 @@ class AdminController extends Controller
             Storage::delete($storedPath);
         }
     }
-
     // ── Checkins CSV-Export ────────────────────────────────
     public function exportCheckins(Request $request)
     {
