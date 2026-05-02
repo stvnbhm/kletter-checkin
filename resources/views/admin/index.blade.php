@@ -178,9 +178,9 @@
                                     </td>
                                     <td class="px-4 py-3">
                                         @if ($reg->member_type === 'member')
-                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Mitglied</span>
+                                            <span class="px-4 py-3 text-gray-500">Mitglied</span>
                                         @else
-                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">Gast</span>
+                                            <span class="px-4 py-3 text-gray-500">Gast</span>
                                         @endif
                                     </td>
                                     <td class="px-4 py-3 text-gray-500">{{ $reg->member_number ?? '–' }}</td>
