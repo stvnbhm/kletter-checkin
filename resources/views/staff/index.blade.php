@@ -169,13 +169,13 @@
                                                      && $visits >= 1 && $visits < 3
                                                      && !$hasActiveKulanz;
 
-                        $needsKulanz = (in_array($registration->access_status, ['red', 'orange']) && !$hasActiveKulanz)
-                                       || $isTrialLimitReached;
-
-                        // Definitiv gesperrt: kein Button, kein Kulanz-Formular
                         $isHardBlocked = $isTrialMaxReached
-                                         || $isUnverifiedMemberBlocked
-                                         || ($registration->access_status === 'red' && !$hasActiveKulanz);
+                        || $isUnverifiedMemberBlocked
+                        || $registration->accessstatus === 'red'; // ← kein Kulanz-Bypass mehr!
+                
+                    $needsKulanz = $registration->accessstatus === 'orange'
+                        && !$hasActiveKulanz
+                        && !$isTrialLimitReached; // ← red komplett raus aus needsKulanz
 
                         $kulanzHint = match (true) {
                             $registration->access_status === 'red' => 'Person gesperrt',
@@ -337,13 +337,13 @@
                                                                  && $visits >= 1 && $visits < 3
                                                                  && !$hasActiveKulanz;
 
-                                    $needsKulanz = (in_array($registration->access_status, ['red', 'orange']) && !$hasActiveKulanz)
-                                                   || $isTrialLimitReached;
-
-                                    // Definitiv gesperrt: kein Button, kein Kulanz-Formular
                                     $isHardBlocked = $isTrialMaxReached
-                                                     || $isUnverifiedMemberBlocked
-                                                     || ($registration->access_status === 'red');
+                                        || $isUnverifiedMemberBlocked
+                                        || $registration->accessstatus === 'red'; // ← kein Kulanz-Bypass mehr!
+                            
+                                    $needsKulanz = $registration->accessstatus === 'orange'
+                                        && !$hasActiveKulanz
+                                        && !$isTrialLimitReached; // ← red komplett raus aus needsKulanz
 
                                     $kulanzHint = match (true) {
                                         $registration->access_status === 'red' => 'Person gesperrt',
