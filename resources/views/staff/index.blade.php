@@ -171,9 +171,9 @@
 
                         $isHardBlocked = $isTrialMaxReached
                         || $isUnverifiedMemberBlocked
-                        || $registration->accessstatus === 'red'; // ← kein Kulanz-Bypass mehr!
+                        || $registration->access_status === 'red'; // ← kein Kulanz-Bypass mehr!
                 
-                    $needsKulanz = $registration->accessstatus === 'orange'
+                    $needsKulanz = $registration->access_status === 'orange'
                         && !$hasActiveKulanz
                         && !$isTrialLimitReached; // ← red komplett raus aus needsKulanz
 
@@ -339,9 +339,9 @@
 
                                     $isHardBlocked = $isTrialMaxReached
                                         || $isUnverifiedMemberBlocked
-                                        || $registration->accessstatus === 'red'; // ← kein Kulanz-Bypass mehr!
+                                        || $registration->access_status === 'red'; // ← kein Kulanz-Bypass mehr!
                             
-                                    $needsKulanz = $registration->accessstatus === 'orange'
+                                    $needsKulanz = $registration->access_status === 'orange'
                                         && !$hasActiveKulanz
                                         && !$isTrialLimitReached; // ← red komplett raus aus needsKulanz
 
