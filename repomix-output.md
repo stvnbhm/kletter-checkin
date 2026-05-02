@@ -211,6 +211,7 @@ tests/
 .env.example
 .gitattributes
 .gitignore
+anleitungen-kletterdom-webapp.md
 artisan
 composer.json
 docker-compose.yml
@@ -4898,6 +4899,197 @@ Homestead.yaml
 Thumbs.db
 ````
 
+## File: anleitungen-kletterdom-webapp.md
+````markdown
+# Kletterdom Check-in System – Anleitungen
+
+## 1. Anleitung für Hallendienst
+
+Diese Anleitung erklärt die wichtigsten Funktionen der Webapp für den laufenden Hallenbetrieb. Der Hallendienst arbeitet im Bereich `Hallendienst`, kann Personen suchen, Check-ins durchführen, QR-Codes scannen, Kulanz vergeben, Einverständniserklärungen bestätigen, Mitglieder importieren und alle offenen Check-ins gesammelt auschecken.[file:1][file:10]
+
+### Anmeldung und Start
+
+1. Melde dich mit deinem Benutzerkonto an.[file:1]
+2. Nach dem Login landest du automatisch im passenden Bereich; Hallendienst-Nutzer werden zur Staff-Ansicht weitergeleitet.[file:1]
+3. In der Staff-Ansicht siehst du oben Kennzahlen wie heute eingecheckt, Gäste heute, Mitglieder heute und Registrierungen gesamt.[file:10]
+
+### Aufbau der Staff-Ansicht
+
+Die Liste zeigt registrierte Personen mit Name, Typ, Mitgliedsnummer, Zutrittsstatus, Hinweisen zu Minderjährigen und der passenden Check-in-Aktion.[file:10]
+
+Die Zutrittsfarben bedeuten:
+
+- Grün: Mitglied ok, direkter Check-in möglich.[file:1]
+- Blau: Schnuppergast ok, direkter Check-in möglich.[file:1]
+- Orange: Warnung, zuerst prüfen; oft ist Hallendienst-Aktion nötig.[file:1][file:10]
+- Rot: Kein Zutritt, kein Check-in möglich.[file:1]
+
+### Person suchen
+
+1. Nutze das Suchfeld für Name oder Mitgliedsnummer.[file:10]
+2. Klicke auf `Suchen`.[file:10]
+3. Mit `Zurücksetzen` wird wieder die volle Liste angezeigt.[file:10]
+
+### Check-in manuell durchführen
+
+1. Suche die Person in der Liste.[file:10]
+2. Prüfe den Zutrittsstatus und eventuelle Hinweise.[file:1][file:10]
+3. Klicke auf `Check-in`, wenn die Person freigegeben ist.[file:10]
+4. Bereits eingecheckte Personen werden entsprechend markiert und können nicht nochmals eingecheckt werden.[file:1][file:10]
+
+Wichtig für die Praxis:
+
+- Rot blockiert den Check-in immer.[file:1][file:10]
+- Gäste mit erstem bereits verbrauchtem Schnupperbesuch brauchen vor dem nächsten Check-in eine Kulanzfreigabe durch den Hallendienst.[file:10]
+- Nicht verifizierte Mitglieder ohne Treffer im Mitgliedersystem haben nur eine begrenzte Anzahl an Besuchen; danach setzt das System den Status auf rot.[file:1][file:10]
+
+### QR-Code scannen
+
+1. Öffne in der Staff-Ansicht den Button `QR-Code scannen`.[file:10]
+2. Erlaube dem Browser den Kamerazugriff.[file:10]
+3. Wähle bei Bedarf die richtige Kamera aus und klicke `Starten`.[file:10]
+4. Halte den QR-Code der Person vor die Kamera.[file:10]
+5. Die Webapp prüft den Code und zeigt direkt Erfolg oder Fehler an.[file:10]
+
+Wichtig: Über QR können nur Personen mit grünem oder blauem Status direkt eingecheckt werden. Orange oder rot werden geblockt und müssen in der Staff-Ansicht geprüft werden.[file:1][file:10]
+
+### Kulanz vergeben
+
+Kulanz ist für Fälle gedacht, in denen ein weiterer Besuch ausnahmsweise erlaubt werden soll, zum Beispiel bei Schnuppergästen nach dem ersten Besuch.[file:10]
+
+1. Suche die Person.[file:10]
+2. Wenn statt `Check-in` ein Kulanz-Hinweis erscheint, trage einen Grund ein.[file:10]
+3. Klicke auf `Kulanz gewähren`.[file:10]
+4. Danach kann der Check-in in der Staff-Ansicht durchgeführt werden.[file:1][file:10]
+
+Die Kulanz setzt den Status auf orange mit Begründung und gilt bis Tagesende.[file:10]
+
+### Minderjährige prüfen
+
+Die App kennzeichnet Minderjährige automatisch.[file:1][file:10]
+
+- Unter 14 Jahren: Klettern nur unter Aufsicht; die Aufsicht muss bestätigt sein.[file:1][file:10]
+- 14 bis 17 Jahre: Falls ohne Aufsicht geklettert wird, braucht es eine Einverständniserklärung der Eltern.[file:1][file:10]
+- Wenn das Formular abgegeben wurde, klicke bei der Person auf `Formular abgegeben`, damit die Erklärung als geprüft markiert wird.[file:10]
+
+### Mitglieder per CSV importieren
+
+Auch der Hallendienst kann einen Mitgliederimport starten.[file:1]
+
+1. CSV-Datei im Importbereich auswählen.[file:1][file:10]
+2. Import starten.[file:1][file:10]
+3. Nach dem Import erscheint eine Erfolg- oder Fehlermeldung.[file:10]
+
+Der Import aktualisiert Mitgliedsdaten und kann Registrierungen mit dem aktuellen Mitgliederstatus synchronisieren.[file:1]
+
+### Alle auschecken
+
+1. Nutze die Funktion zum Sammel-Checkout, wenn der Hallenbetrieb endet.[file:1]
+2. Dadurch werden alle offenen Check-ins geschlossen.[file:1]
+3. Bei Gästen oder begrenzten Sonderfällen kann das System danach automatisch den Zutrittsstatus anpassen, wenn ein Limit erreicht wurde.[file:1]
+
+### Typische Hinweise
+
+- `Bereits eingecheckt`: Die Person ist noch aktiv in der Halle.[file:1][file:10]
+- `Kein Zutritt`: Kein Check-in möglich.[file:1]
+- `Kulanz erforderlich`: Erst Grund eintragen und Kulanz gewähren.[file:10]
+- `Formular abgegeben`: Elternerklärung wurde vom Hallendienst bestätigt.[file:10]
+
+---
+
+## 2. Anleitung für Admin
+
+Diese Anleitung erklärt die Bedienung des Admin-Bereichs. Admins haben Zugriff auf Dashboard, Statistiken, Mitgliederimport, Check-in-Export sowie Löschfunktionen für Registrierungen und inaktive Mitglieder.[file:1]
+
+### Anmeldung und Zugriff
+
+1. Melde dich mit einem Admin-Konto an.[file:1]
+2. Admin-Nutzer werden nach dem Login in den Admin-Bereich weitergeleitet.[file:1]
+3. Nur Benutzer mit Admin-Recht dürfen diesen Bereich öffnen; andere werden zurück in den Hallendienst geleitet.[file:1]
+
+### Aufbau des Admin-Dashboards
+
+Das Dashboard zeigt zentrale Kennzahlen für den Betrieb:[file:1]
+
+- Heute eingecheckt.[file:1]
+- Registrierungen gesamt.[file:1]
+- Aktive Mitglieder.[file:1]
+- Inaktive Mitglieder.[file:1]
+
+Zusätzlich gibt es ein Diagramm zur Hallenauslastung der letzten 30 Tage auf Basis der täglichen Check-ins.[file:1]
+
+### Mitglieder per CSV importieren
+
+Der CSV-Import ist eine der wichtigsten Admin-Funktionen. Er aktualisiert oder legt Mitglieder an und synchronisiert ihren Status mit bestehenden Registrierungen.[file:1]
+
+#### So funktioniert der Import
+
+1. Öffne den Importbereich im Admin-Dashboard.[file:1]
+2. Wähle die Mitglieder-CSV aus.[file:1]
+3. Starte den Import.[file:1]
+4. Prüfe die Rückmeldung nach Abschluss.[file:1]
+
+#### Was der Import macht
+
+- Mitgliederdaten werden aktualisiert oder neu angelegt.[file:1]
+- Aktive, bezahlte Mitglieder können wieder auf grün gesetzt werden.[file:1]
+- Mitglieder mit offenem Beitrag können auf orange gesetzt werden.[file:1]
+- Inaktive Mitglieder werden auf rot gesetzt.[file:1]
+
+#### Fehlende Mitglieder bestätigen
+
+Wenn bei einem neuen Import bisher bekannte Mitglieder in der CSV fehlen, stoppt die App den Vorgang zunächst und verlangt eine explizite Bestätigung der Anzahl fehlender Mitglieder.[file:1]
+
+Vorgehen:
+
+1. Lies die Warnung im Importbereich.[file:1]
+2. Trage die geforderte Anzahl in das Bestätigungsfeld ein.[file:1]
+3. Starte den Import erneut.[file:1]
+
+So wird verhindert, dass Mitglieder versehentlich als inaktiv markiert werden.[file:1]
+
+### Check-ins exportieren
+
+1. Öffne im Admin-Bereich die Exportfunktion.[file:1]
+2. Starte den Export der Check-in-Daten.[file:1]
+3. Die Datei kann anschließend für Auswertung oder Archivierung verwendet werden.[file:1]
+
+Der Export enthält Check-in-Daten inklusive wesentlicher Registrierungsinformationen.[file:1]
+
+### Registrierungen löschen
+
+Admins können einzelne Registrierungen vollständig entfernen.[file:1]
+
+1. Suche im Admin-Bereich die gewünschte Registrierung.[file:1]
+2. Starte die Löschaktion.[file:1]
+3. Die zugehörigen Check-ins werden mit gelöscht.[file:1]
+
+Diese Funktion sollte nur genutzt werden, wenn ein Datensatz wirklich entfernt werden muss.[file:1]
+
+### Inaktive Mitglieder löschen
+
+Admins können zusätzlich alle als inaktiv markierten Mitglieder bereinigen.[file:1]
+
+1. Starte die Funktion `Inaktive Mitglieder löschen`.[file:1]
+2. Die App entfernt die betroffenen Mitgliederdatensätze.[file:1]
+3. Zugehörige Registrierungen und Check-ins dieser inaktiven Mitglieder werden ebenfalls gelöscht.[file:1]
+
+Diese Funktion ist nur für echte Bereinigungen gedacht und sollte mit Vorsicht verwendet werden.[file:1]
+
+### Wichtige Admin-Hinweise
+
+- Der Admin-Bereich ist nur für Benutzer mit Admin-Recht freigegeben.[file:1]
+- Ein fehlerhafter CSV-Import wird mit klaren Meldungen gestoppt, zum Beispiel wenn die Spalte `Mitgliedsnummer` fehlt.[file:1]
+- Der Import schützt vor versehentlichen Massenänderungen durch die Bestätigung fehlender Mitglieder.[file:1]
+
+### Empfohlener Admin-Ablauf
+
+1. Regelmäßig Mitglieder-CSV importieren.[file:1]
+2. Dashboard-Kennzahlen und Hallenauslastung prüfen.[file:1]
+3. Bei Bedarf Check-ins exportieren.[file:1]
+4. Nur nach Prüfung Registrierungen oder inaktive Mitglieder löschen.[file:1]
+````
+
 ## File: artisan
 ````
 #!/usr/bin/env php
@@ -5146,64 +5338,34 @@ parameters:
 
 ## File: README.md
 ````markdown
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Kletterdom Check-in System
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Webapp für den Check-in-Betrieb im Kletterdom mit Rollen für Hallendienst und Admin. Das System deckt Registrierung, Zutrittsprüfung, Check-in per Button oder QR-Code, Kulanzfälle, Minderjährigen-Logik sowie Mitgliederverwaltung per CSV-Import ab.[file:1]
 
-## About Laravel
+## Funktionen
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- Öffentliche Registrierung für Mitglieder und Gäste mit QR-Code-Verifizierung.[file:1]
+- Hallendienst-Ansicht mit Suche, manuellem Check-in, QR-Scanner, Kulanz und Sammel-Checkout.[file:1]
+- Automatische Regeln für Schnuppergäste, unbestätigte Mitglieder und Minderjährige.[file:1]
+- Admin-Dashboard mit Kennzahlen, Auslastung, CSV-Import, Export und Datenbereinigung.[file:1]
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Rollen
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+### Hallendienst
 
-## Learning Laravel
+Der Hallendienst prüft Personen vor Ort, führt Check-ins durch, scannt QR-Codes, vergibt bei Bedarf Kulanz und bestätigt Einverständniserklärungen für Jugendliche.[file:1]
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+### Admin
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+Admins verwalten Mitgliederdaten per CSV, exportieren Check-ins, sehen Kennzahlen im Dashboard und können Registrierungen oder inaktive Mitglieder bereinigen.[file:1]
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+## Technik
 
-## Agentic Development
+Das Projekt basiert auf Laravel und verwendet MySQL, Nginx, PHP-FPM sowie Docker für das Deployment.[file:1][file:8]
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+## Einsatz
 
-```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
-```
-
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
-
-## Contributing
-
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
-
-## Code of Conduct
-
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
-
-## Security Vulnerabilities
-
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
-
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Gedacht für den einfachen und nachvollziehbaren Hallenbetrieb mit klaren Freigaben, Statusfarben und getrennten Bereichen für operative Nutzung und Verwaltung.[file:1]
 ````
 
 ## File: tailwind.config.js
