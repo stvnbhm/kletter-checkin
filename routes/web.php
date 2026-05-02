@@ -49,6 +49,6 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/import-members', [AdminController::class, 'importMembers'])->name('importMembers');
         Route::get('/export-checkins', [AdminController::class, 'exportCheckins'])->name('exportCheckins');
         Route::delete('/registrations/{registration}', [AdminController::class, 'destroyRegistration'])->name('registrations.destroy');
-        Route::delete('admin/inactive-members', [AdminController::class, 'deleteInactiveMembers'])->name('admin.deleteInactiveMembers');
+        Route::delete('/inactive-members', [AdminController::class, 'deleteInactiveMembers'])->name('deleteInactiveMembers');
     });
 });

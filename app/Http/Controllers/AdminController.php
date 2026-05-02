@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Http\RedirectResponse;
 
 class AdminController extends Controller
 {
@@ -264,10 +265,19 @@ class AdminController extends Controller
     // ── Inaktive Mitglieder löschen ────────────────────────
     public function deleteInactiveMembers(): RedirectResponse
     {
-        $ids = Registration::where('membership_status', 'inactive')->pluck('id');
-        Checkin::whereIn('registration_id', $ids)->delete();
-        Registration::whereIn('id', $ids)->delete();
-        return redirect()->route('admin.index')->with('success', count($ids) . ' inaktive Mitglieder gelöscht.');
+        $memberNumbers = Member::where('membership_status', 'inactive')
+            ->pluck('member_number');
+    
+        $registrationIds = Registration::whereIn('member_number', $memberNumbers)
+            ->pluck('id');
+    
+        Checkin::whereIn('registration_id', $registrationIds)->delete();
+        Registration::whereIn('id', $registrationIds)->delete();
+        Member::whereIn('member_number', $memberNumbers)->delete();
+    
+        return redirect()
+            ->route('admin.index')
+            ->with('success', $memberNumbers->count() . ' inaktive Mitglieder gelöscht.');
     }
 
     // ── Checkins CSV-Export ────────────────────────────────
