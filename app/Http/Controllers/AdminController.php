@@ -42,13 +42,11 @@ class AdminController extends Controller
         $stats = [
             'total_registrations' => Registration::count(),
             'checked_in_today'    => Checkin::whereDate('checked_in_at', today())->count(),
-            'members'             => Member::where('membership_status', 'active')->count(),
+            'members'             => Member::where('membership_status', 'active')->count(),           // ✅ Members-Tabelle
             'guests_today'        => Checkin::whereDate('checked_in_at', today())
                 ->whereHas('registration', fn($q) => $q->where('member_type', 'guest'))
                 ->count(),
-            'inactive_members' => Registration::where('member_type', 'member')
-                ->where('membership_status', 'inactive')
-                ->count(),
+            'inactive_members'    => Member::where('membership_status', 'inactive')->count(),       // ✅ Members-Tabelle!
         ];
 
         return view('admin.index', compact('registrations', 'labels', 'values', 'stats'));
