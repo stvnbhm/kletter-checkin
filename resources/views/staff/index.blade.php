@@ -343,7 +343,7 @@
                                     // Definitiv gesperrt: kein Button, kein Kulanz-Formular
                                     $isHardBlocked = $isTrialMaxReached
                                                      || $isUnverifiedMemberBlocked
-                                                     || ($registration->access_status === 'red';
+                                                     || ($registration->access_status === 'red');
 
                                     $kulanzHint = match (true) {
                                         $registration->access_status === 'red' => 'Person gesperrt',

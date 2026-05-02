@@ -54,7 +54,7 @@
                 </div>
                 <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
                     <div class="text-3xl font-bold text-purple-500">{{ $stats['members'] }}</div>
-                    <div class="text-sm text-gray-500 mt-1">Mitglieder (CSV)</div>
+                    <div class="text-sm text-gray-500 mt-1">Aktive Mitglieder</div>
                 </div>
             </div>
 
@@ -88,7 +88,9 @@
                             @error('members_csv')
                                 <p class="text-red-500 text-xs mt-1">{{ $message }}</p>
                             @enderror
-                            @if (session('confirm_missing_count_required'))
+                        </div>
+                        
+                        @if (session('confirm_missing_count_required'))
                                 <div class="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
                                     Achtung: {{ session('confirm_missing_count_required') }} bestehende Mitglieder fehlen in der CSV.
                                     Um diese auf „inaktiv“ zu setzen, bitte die Zahl unten exakt eingeben und den Import erneut starten.
@@ -108,8 +110,6 @@
                                     placeholder="z. B. 12"
                                 >
                             </div>
-
-                        </div>
                                                 
                         <button type="submit"
                             class="w-full bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold py-2 px-4 rounded-lg transition">
