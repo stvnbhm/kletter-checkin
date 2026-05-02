@@ -109,6 +109,7 @@
                                     class="mt-1 block w-48 rounded-md border-gray-300 shadow-sm"
                                     placeholder="z. B. 12"
                                 >
+                                <input type="hidden" name="stored_csv_path" value="{{ old('stored_csv_path', session('stored_csv_path')) }}">
                             </div>
                                                 
                         <button type="submit"

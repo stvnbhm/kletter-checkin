@@ -67,23 +67,46 @@ class AdminController extends Controller
     public function importMembers(Request $request)
     {
         $request->validate([
-            'members_csv' => ['required', 'file', 'mimes:csv,txt'],
+            'members_csv' => ['nullable', 'file', 'mimes:csv,txt'],
             'confirm_missing_count' => ['nullable', 'integer'],
+            'stored_csv_path' => ['nullable', 'string'],
         ]);
     
-        $storedPath = $request->file('members_csv')->store('imports');
+        $storedPath = null;
+        $deleteStoredFile = false;
     
-        if (!$storedPath) {
+        if ($request->hasFile('members_csv')) {
+            $storedPath = $request->file('members_csv')->store('imports');
+            $deleteStoredFile = true;
+    
+            if (!$storedPath) {
+                return redirect()
+                    ->route('admin.index')
+                    ->with('error', 'CSV konnte nicht sicher gespeichert werden.');
+            }
+        } elseif ($request->filled('stored_csv_path')) {
+            $storedPath = $request->input('stored_csv_path');
+    
+            if (!Storage::exists($storedPath)) {
+                return redirect()
+                    ->route('admin.index')
+                    ->with('error', 'Die zwischengespeicherte CSV wurde nicht gefunden. Bitte Datei erneut auswählen.');
+            }
+    
+            $deleteStoredFile = true;
+        } else {
             return redirect()
                 ->route('admin.index')
-                ->with('error', 'CSV konnte nicht sicher gespeichert werden.');
+                ->with('error', 'Bitte CSV-Datei auswählen.');
         }
     
         $fullPath = Storage::path($storedPath);
         $handle = fopen($fullPath, 'r');
     
         if (!$handle) {
-            Storage::delete($storedPath);
+            if ($deleteStoredFile && Storage::exists($storedPath)) {
+                Storage::delete($storedPath);
+            }
     
             return redirect()
                 ->route('admin.index')
@@ -96,7 +119,8 @@ class AdminController extends Controller
             if (!$headers) {
                 return redirect()
                     ->route('admin.index')
-                    ->with('error', 'CSV konnte nicht gelesen werden.');
+                    ->with('error', 'CSV konnte nicht gelesen werden.')
+                    ->with('stored_csv_path', $storedPath);
             }
     
             $headers[0] = preg_replace('/^\xEF\xBB\xBF/', '', $headers[0]);
@@ -104,7 +128,8 @@ class AdminController extends Controller
             if (!in_array('Mitgliedsnummer', $headers, true)) {
                 return redirect()
                     ->route('admin.index')
-                    ->with('error', 'CSV-Format ungültig: Spalte "Mitgliedsnummer" fehlt.');
+                    ->with('error', 'CSV-Format ungültig: Spalte "Mitgliedsnummer" fehlt.')
+                    ->with('stored_csv_path', $storedPath);
             }
     
             $imported = 0;
@@ -189,7 +214,8 @@ class AdminController extends Controller
             if ($imported === 0) {
                 return redirect()
                     ->route('admin.index')
-                    ->with('error', 'CSV wurde gelesen, aber es konnten keine Datensätze importiert werden.');
+                    ->with('error', 'CSV wurde gelesen, aber es konnten keine Datensätze importiert werden.')
+                    ->with('stored_csv_path', $storedPath);
             }
     
             $importedMemberNumbers = array_values(array_unique($importedMemberNumbers));
@@ -201,10 +227,13 @@ class AdminController extends Controller
             $missingCount = $missingMemberNumbers->count();
     
             if ($missingCount > 0 && (int) $request->input('confirm_missing_count') !== $missingCount) {
+                $deleteStoredFile = false;
+    
                 return redirect()
                     ->route('admin.index')
                     ->with('warning', "Import abgebrochen: {$missingCount} bestehende Mitglieder fehlen in der CSV. Bitte Import erneut starten und diese Anzahl explizit bestätigen.")
-                    ->with('confirm_missing_count_required', $missingCount);
+                    ->with('confirm_missing_count_required', $missingCount)
+                    ->with('stored_csv_path', $storedPath);
             }
     
             if ($missingCount > 0) {
@@ -225,9 +254,13 @@ class AdminController extends Controller
                 ->with('success', "Mitgliederimport abgeschlossen: {$imported} Datensätze verarbeitet.");
         } finally {
             fclose($handle);
-            Storage::delete($storedPath);
+    
+            if ($deleteStoredFile && $storedPath && Storage::exists($storedPath)) {
+                Storage::delete($storedPath);
+            }
         }
     }
+
     // ── Checkins CSV-Export ────────────────────────────────
     public function exportCheckins(Request $request)
     {
