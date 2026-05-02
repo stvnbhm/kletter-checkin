@@ -6688,63 +6688,6 @@ echo "Update fertig!"
 </html>
 ````
 
-## File: routes/web.php
-````php
-<?php
-
-use App\Http\Controllers\AdminController;
-use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\RegistrationController;
-use App\Http\Controllers\StaffController;
-
-Route::get('/', function () {
-    return view('welcome');
-});
-
-Route::get('/halle-register', [RegistrationController::class, 'create'])->name('register');
-Route::post('/halle-register', [RegistrationController::class, 'store'])
-    ->middleware('throttle:3,1')
-    ->name('register.store');
-Route::get('/verify/{token}', [RegistrationController::class, 'verify'])->name('verify');
-
-// Angepasste Dashboard-Weiterleitung basierend auf der Rolle
-Route::get('/dashboard', function () {
-    if (auth()->check() && auth()->user()->is_admin) {
-        return redirect()->route('admin.index');
-    }
-    
-    return redirect()->route('staff');
-})->middleware(['auth'])->name('dashboard');
-
-require __DIR__ . '/auth.php';
-
-// Alle geschützten Routen (erfordern Login)
-Route::middleware(['auth'])->group(function () {
-    
-    // ==========================================
-    // BEREICH FÜR ALLE (Staff & Admin)
-    // ==========================================
-    Route::get('/hallendienst', [StaffController::class, 'index'])->name('staff');
-    Route::post('/hallendienst/check-in/{registration}', [StaffController::class, 'checkin'])->name('staff.checkin');
-    Route::post('/hallendienst/import-members', [StaffController::class, 'importMembers'])->name('staff.importMembers');
-    Route::post('/hallendienst/kulanz/{registration}', [StaffController::class, 'grantKulanz'])->name('staff.kulanz');
-    Route::post('/hallendienst/{registration}/kulanz-checkin', [StaffController::class, 'kulanzCheckin'])->name('staff.kulanz-checkin');
-    Route::post('/hallendienst/{registration}/parent-consent', [StaffController::class, 'confirmParentConsent'])->name('staff.parent-consent');
-    Route::post('/hallendienst/checkout-all', [StaffController::class, 'checkoutAll'])->name('staff.checkout-all');
-    Route::post('/verify/{token}/checkin', [RegistrationController::class, 'checkin'])->name('verify.checkin');
-    
-    // ==========================================
-    // EXKLUSIVER ADMIN-BEREICH
-    // ==========================================
-    Route::middleware(['admin'])->prefix('admin')->name('admin.')->group(function () {
-        Route::get('/', [AdminController::class, 'index'])->name('index');
-        Route::post('/import-members', [AdminController::class, 'importMembers'])->name('importMembers');
-        Route::get('/export-checkins', [AdminController::class, 'exportCheckins'])->name('exportCheckins');
-        Route::delete('/registrations/{registration}', [AdminController::class, 'destroyRegistration'])->name('registrations.destroy');
-    });
-});
-````
-
 ## File: docker-compose.yml
 ````yaml
 services:
@@ -7265,6 +7208,64 @@ EXPOSE 9000
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
 ````
 
+## File: routes/web.php
+````php
+<?php
+
+use App\Http\Controllers\AdminController;
+use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\RegistrationController;
+use App\Http\Controllers\StaffController;
+
+Route::get('/', function () {
+    return view('welcome');
+});
+
+Route::get('/halle-register', [RegistrationController::class, 'create'])->name('register');
+Route::post('/halle-register', [RegistrationController::class, 'store'])
+    ->middleware('throttle:3,1')
+    ->name('register.store');
+Route::get('/verify/{token}', [RegistrationController::class, 'verify'])->name('verify');
+
+// Angepasste Dashboard-Weiterleitung basierend auf der Rolle
+Route::get('/dashboard', function () {
+    if (auth()->check() && auth()->user()->is_admin) {
+        return redirect()->route('admin.index');
+    }
+    
+    return redirect()->route('staff');
+})->middleware(['auth'])->name('dashboard');
+
+require __DIR__ . '/auth.php';
+
+// Alle geschützten Routen (erfordern Login)
+Route::middleware(['auth'])->group(function () {
+    
+    // ==========================================
+    // BEREICH FÜR ALLE (Staff & Admin)
+    // ==========================================
+    Route::get('/hallendienst', [StaffController::class, 'index'])->name('staff');
+    Route::post('/hallendienst/check-in/{registration}', [StaffController::class, 'checkin'])->name('staff.checkin');
+    Route::post('/hallendienst/import-members', [StaffController::class, 'importMembers'])->name('staff.importMembers');
+    Route::post('/hallendienst/kulanz/{registration}', [StaffController::class, 'grantKulanz'])->name('staff.kulanz');
+    Route::post('/hallendienst/{registration}/kulanz-checkin', [StaffController::class, 'kulanzCheckin'])->name('staff.kulanz-checkin');
+    Route::post('/hallendienst/{registration}/parent-consent', [StaffController::class, 'confirmParentConsent'])->name('staff.parent-consent');
+    Route::post('/hallendienst/checkout-all', [StaffController::class, 'checkoutAll'])->name('staff.checkout-all');
+    Route::post('/verify/{token}/checkin', [RegistrationController::class, 'checkin'])->name('verify.checkin');
+    
+    // ==========================================
+    // EXKLUSIVER ADMIN-BEREICH
+    // ==========================================
+    Route::middleware(['admin'])->prefix('admin')->name('admin.')->group(function () {
+        Route::get('/', [AdminController::class, 'index'])->name('index');
+        Route::post('/import-members', [AdminController::class, 'importMembers'])->name('importMembers');
+        Route::get('/export-checkins', [AdminController::class, 'exportCheckins'])->name('exportCheckins');
+        Route::delete('/registrations/{registration}', [AdminController::class, 'destroyRegistration'])->name('registrations.destroy');
+        Route::delete('/inactive-members', [AdminController::class, 'deleteInactiveMembers'])->name('deleteInactiveMembers');
+    });
+});
+````
+
 ## File: resources/views/admin/index.blade.php
 ````php
 <!DOCTYPE html>
@@ -7274,7 +7275,6 @@ CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Admin | Kletterdom</title>
-
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="font-sans antialiased bg-gray-50 text-gray-900">
@@ -7284,9 +7284,7 @@ CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
     <header class="bg-white shadow">
         <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between">
-                <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-                    🛠️ Admin-Bereich
-                </h2>
+                <h2 class="font-semibold text-xl text-gray-800 leading-tight">🛠️ Admin-Bereich</h2>
                 <span class="text-sm text-gray-500">Hallenverwaltung</span>
             </div>
         </div>
@@ -7314,16 +7312,16 @@ CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
                     <div class="text-sm text-gray-500 mt-1">Heute eingecheckt</div>
                 </div>
                 <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
-                    <div class="text-3xl font-bold text-blue-500">{{ $stats['guests_today'] }}</div>
-                    <div class="text-sm text-gray-500 mt-1">Davon Gäste heute</div>
-                </div>
-                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
                     <div class="text-3xl font-bold text-gray-700">{{ $stats['total_registrations'] }}</div>
                     <div class="text-sm text-gray-500 mt-1">Registrierungen gesamt</div>
                 </div>
                 <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
                     <div class="text-3xl font-bold text-purple-500">{{ $stats['members'] }}</div>
                     <div class="text-sm text-gray-500 mt-1">Aktive Mitglieder</div>
+                </div>
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+                    <div class="text-3xl font-bold text-red-400">{{ $stats['inactive_members'] }}</div>
+                    <div class="text-sm text-gray-500 mt-1">Inaktive Mitglieder</div>
                 </div>
             </div>
 
@@ -7339,70 +7337,97 @@ CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
             <div class="grid md:grid-cols-2 gap-6">
 
                 {{-- Mitglieder CSV-Import --}}
-                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                    <h3 class="text-lg font-semibold text-gray-700 mb-1">📥 Mitglieder importieren</h3>
-                    <p class="mt-1 text-xs text-gray-500">
-                        CSV-Datei mit Spalten:
-                        <code class="font-mono">Mitgliedsnummer; Nachname; Vorname; Email; Status; Betrag offen; Geburtsdatum</code>
-                    </p>
-                    <form action="{{ route('admin.importMembers') }}" method="POST" enctype="multipart/form-data" class="space-y-3">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col gap-4">
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-700">📥 Mitglieder importieren</h3>
+                        <p class="mt-1 text-xs text-gray-400 leading-relaxed">
+                            CSV-Spalten:
+                            <code class="font-mono bg-gray-100 px-1 py-0.5 rounded text-gray-600">
+                                Mitgliedsnummer; Nachname; Vorname; Email; Status; Betrag offen; Geburtsdatum
+                            </code>
+                        </p>
+                    </div>
+
+                    <form id="importForm"
+                          action="{{ route('admin.importMembers') }}"
+                          method="POST"
+                          enctype="multipart/form-data"
+                          class="flex flex-col gap-4">
                         @csrf
-                        <div>
-                            <label class="block text-sm font-medium text-gray-600 mb-1">CSV-Datei wählen</label>
+
+                        {{-- Datei-Picker --}}
+                        <div class="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                            <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                                CSV-Datei wählen
+                            </label>
                             <input type="file" name="members_csv" accept=".csv,.txt"
                                 class="block w-full text-sm text-gray-500
-                                       file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0
+                                       file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0
                                        file:text-sm file:font-semibold file:bg-teal-50 file:text-teal-700
-                                       hover:file:bg-teal-100 border border-gray-200 rounded-lg p-1">
+                                       hover:file:bg-teal-100">
                             @error('members_csv')
                                 <p class="text-red-500 text-xs mt-1">{{ $message }}</p>
                             @enderror
                         </div>
-                        
+
+                        {{-- Bestätigungs-Block (nur sichtbar wenn nötig) --}}
                         @if (session('confirm_missing_count_required'))
-                                <div class="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-                                    Achtung: {{ session('confirm_missing_count_required') }} bestehende Mitglieder fehlen in der CSV.
-                                    Um diese auf „inaktiv“ zu setzen, bitte die Zahl unten exakt eingeben und den Import erneut starten.
-                                </div>
-                            @endif
-                            
-                            <div class="mt-4">
-                                <label for="confirm_missing_count" class="block text-sm font-medium text-gray-700">
-                                    Anzahl fehlender Mitglieder bestätigen
-                                </label>
-                                <input
-                                    type="number"
-                                    name="confirm_missing_count"
-                                    id="confirm_missing_count"
-                                    value="{{ old('confirm_missing_count') }}"
-                                    class="mt-1 block w-48 rounded-md border-gray-300 shadow-sm"
-                                    placeholder="z. B. 12"
-                                >
-                                <input type="hidden" name="stored_csv_path" value="{{ old('stored_csv_path', session('stored_csv_path')) }}">
+                            <div class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                                ⚠️ <strong>{{ session('confirm_missing_count_required') }} Mitglieder</strong>
+                                fehlen in der CSV und würden auf „inaktiv" gesetzt.
+                                Bitte die Anzahl unten bestätigen und erneut importieren.
                             </div>
-                                                
-                        <button type="submit"
-                            class="w-full bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold py-2 px-4 rounded-lg transition">
-                            Importieren
+                        @endif
+
+                        <div class="flex flex-col gap-1">
+                            <label for="confirm_missing_count"
+                                   class="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                Fehlende Mitglieder bestätigen
+                            </label>
+                            <input type="number"
+                                   name="confirm_missing_count"
+                                   id="confirm_missing_count"
+                                   value="{{ old('confirm_missing_count') }}"
+                                   placeholder="z. B. 12"
+                                   class="w-36 border border-gray-300 rounded-md px-3 py-1.5 text-sm shadow-sm focus:ring-teal-400 focus:border-teal-400">
+                            <input type="hidden" name="stored_csv_path"
+                                   value="{{ old('stored_csv_path', session('stored_csv_path')) }}">
+                        </div>
+
+                        {{-- Submit-Button mit Doppelklick-Schutz --}}
+                        <button id="importBtn" type="submit"
+                            class="w-full bg-teal-600 hover:bg-teal-700 disabled:bg-teal-300 disabled:cursor-not-allowed
+                                   text-white text-sm font-semibold py-2 px-4 rounded-lg transition flex items-center justify-center gap-2">
+                            <span id="importBtnText">Importieren</span>
+                            <svg id="importSpinner" class="hidden animate-spin h-4 w-4 text-white"
+                                 xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10"
+                                        stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor"
+                                      d="M4 12a8 8 0 018-8v8H4z"></path>
+                            </svg>
                         </button>
                     </form>
                 </div>
 
                 {{-- Check-ins CSV-Export --}}
-                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                    <h3 class="text-lg font-semibold text-gray-700 mb-1">📤 Check-ins exportieren</h3>
-                    <p class="text-sm text-gray-400 mb-4">
-                        Exportiert alle Check-ins im gewählten Zeitraum als CSV (Excel-kompatibel, UTF-8 BOM, Semikolon-getrennt).
-                    </p>
-                    <form action="{{ route('admin.exportCheckins') }}" method="GET" class="space-y-3">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col gap-4">
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-700">📤 Check-ins exportieren</h3>
+                        <p class="text-sm text-gray-400">
+                            Exportiert alle Check-ins im gewählten Zeitraum als CSV
+                            (Excel-kompatibel, UTF-8 BOM, Semikolon-getrennt).
+                        </p>
+                    </div>
+                    <form action="{{ route('admin.exportCheckins') }}" method="GET" class="flex flex-col gap-4">
                         <div class="grid grid-cols-2 gap-3">
                             <div>
-                                <label class="block text-sm font-medium text-gray-600 mb-1">Von</label>
+                                <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Von</label>
                                 <input type="date" name="from" value="{{ now()->subDays(30)->toDateString() }}"
                                     class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-400 focus:outline-none">
                             </div>
                             <div>
-                                <label class="block text-sm font-medium text-gray-600 mb-1">Bis</label>
+                                <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Bis</label>
                                 <input type="date" name="to" value="{{ now()->toDateString() }}"
                                     class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-400 focus:outline-none">
                             </div>
@@ -7412,6 +7437,25 @@ CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
                             CSV herunterladen
                         </button>
                     </form>
+
+                    {{-- ── Inaktive Mitglieder löschen ── --}}
+                    <div class="border-t border-gray-100 pt-4 mt-auto">
+                        <h4 class="text-sm font-semibold text-gray-600 mb-1">🗑️ Inaktive Mitglieder entfernen</h4>
+                        <p class="text-xs text-gray-400 mb-3">
+                            Löscht alle Registrierungen mit <code class="font-mono bg-gray-100 px-1 rounded">membership_status = inactive</code>
+                            dauerhaft aus der Datenbank inkl. ihrer Check-ins.
+                        </p>
+                        <form action="{{ route('admin.deleteInactiveMembers') }}" method="POST"
+                              onsubmit="return confirm('Alle inaktiven Mitglieder ({{ $stats['inactive_members'] }}) wirklich dauerhaft löschen? Diese Aktion kann nicht rückgängig gemacht werden.')">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit"
+                                class="w-full bg-red-50 hover:bg-red-100 border border-red-200 text-red-700
+                                       text-sm font-semibold py-2 px-4 rounded-lg transition">
+                                {{ $stats['inactive_members'] }} inaktive Mitglieder löschen
+                            </button>
+                        </form>
+                    </div>
                 </div>
             </div>
 
@@ -7445,12 +7489,8 @@ CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
                                             <div class="text-xs text-gray-400">{{ $reg->birth_date?->format('d.m.Y') ?? '—' }}</div>
                                         @endif
                                     </td>
-                                    <td class="px-4 py-3">
-                                        @if ($reg->member_type === 'member')
-                                            <span class="px-4 py-3 text-gray-500">Mitglied</span>
-                                        @else
-                                            <span class="px-4 py-3 text-gray-500">Gast</span>
-                                        @endif
+                                    <td class="px-4 py-3 text-gray-500">
+                                        {{ $reg->member_type === 'member' ? 'Mitglied' : 'Gast' }}
                                     </td>
                                     <td class="px-4 py-3 text-gray-500">{{ $reg->member_number ?? '–' }}</td>
                                     <td class="px-4 py-3">
@@ -7474,8 +7514,7 @@ CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
                                               onsubmit="return confirm('Registrierung von {{ addslashes($reg->first_name . ' ' . $reg->last_name) }} wirklich löschen? Alle Check-ins werden mitgelöscht.')">
                                             @csrf
                                             @method('DELETE')
-                                            <button type="submit"
-                                                class="text-xs text-red-500 hover:text-red-700 hover:underline transition">
+                                            <button type="submit" class="text-xs text-red-500 hover:text-red-700 hover:underline transition">
                                                 Löschen
                                             </button>
                                         </form>
@@ -7534,6 +7573,17 @@ CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
     {{-- Chart.js --}}
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script>
+        // CSV Import: Doppelklick-Schutz
+        document.getElementById('importForm').addEventListener('submit', function () {
+            const btn     = document.getElementById('importBtn');
+            const text    = document.getElementById('importBtnText');
+            const spinner = document.getElementById('importSpinner');
+            btn.disabled     = true;
+            text.textContent = 'Wird importiert…';
+            spinner.classList.remove('hidden');
+        });
+
+        // Auslastungs-Chart
         const labels = @json($labels);
         const values = @json($values);
 
@@ -7544,7 +7594,7 @@ CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
                 datasets: [{
                     label: 'Check-ins',
                     data: values,
-                    backgroundColor: 'rgba(13, 148, 136, 0.7)',   // teal-600
+                    backgroundColor: 'rgba(13, 148, 136, 0.7)',
                     borderColor:     'rgba(13, 148, 136, 1)',
                     borderWidth: 1,
                     borderRadius: 4,
@@ -7759,13 +7809,13 @@ CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
                                                      && $visits >= 1 && $visits < 3
                                                      && !$hasActiveKulanz;
 
-                        $needsKulanz = (in_array($registration->access_status, ['red', 'orange']) && !$hasActiveKulanz)
-                                       || $isTrialLimitReached;
-
-                        // Definitiv gesperrt: kein Button, kein Kulanz-Formular
                         $isHardBlocked = $isTrialMaxReached
-                                         || $isUnverifiedMemberBlocked
-                                         || ($registration->access_status === 'red' && !$hasActiveKulanz);
+                        || $isUnverifiedMemberBlocked
+                        || $registration->access_status === 'red'; // ← kein Kulanz-Bypass mehr!
+                
+                    $needsKulanz = $registration->access_status === 'orange'
+                        && !$hasActiveKulanz
+                        && !$isTrialLimitReached; // ← red komplett raus aus needsKulanz
 
                         $kulanzHint = match (true) {
                             $registration->access_status === 'red' => 'Person gesperrt',
@@ -7927,13 +7977,13 @@ CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
                                                                  && $visits >= 1 && $visits < 3
                                                                  && !$hasActiveKulanz;
 
-                                    $needsKulanz = (in_array($registration->access_status, ['red', 'orange']) && !$hasActiveKulanz)
-                                                   || $isTrialLimitReached;
-
-                                    // Definitiv gesperrt: kein Button, kein Kulanz-Formular
                                     $isHardBlocked = $isTrialMaxReached
-                                                     || $isUnverifiedMemberBlocked
-                                                     || ($registration->access_status === 'red');
+                                        || $isUnverifiedMemberBlocked
+                                        || $registration->access_status === 'red'; // ← kein Kulanz-Bypass mehr!
+                            
+                                    $needsKulanz = $registration->access_status === 'orange'
+                                        && !$hasActiveKulanz
+                                        && !$isTrialLimitReached; // ← red komplett raus aus needsKulanz
 
                                     $kulanzHint = match (true) {
                                         $registration->access_status === 'red' => 'Person gesperrt',
@@ -8209,355 +8259,6 @@ CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
 
 </body>
 </html>
-````
-
-## File: app/Http/Controllers/AdminController.php
-````php
-<?php
-
-namespace App\Http\Controllers;
-
-use App\Models\Registration;
-use App\Models\Member;
-use App\Models\Checkin;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Carbon\Carbon;
-use Illuminate\Support\Facades\Storage;
-
-class AdminController extends Controller
-{
-    // ── Dashboard ──────────────────────────────────────────
-    public function index()
-    {
-        $registrations = Registration::withCount('checkins')
-            ->orderByDesc('created_at')
-            ->paginate(30);
-
-        // Hallenauslastung: Checkins pro Tag (letzte 30 Tage)
-        $chartData = Checkin::select(
-                DB::raw('DATE(checked_in_at) as day'),
-                DB::raw('COUNT(*) as total')
-            )
-            ->where('checked_in_at', '>=', Carbon::now()->subDays(29)->startOfDay())
-            ->groupBy('day')
-            ->orderBy('day')
-            ->get()
-            ->keyBy('day');
-
-        // Auffüllen: auch Tage ohne Check-ins erscheinen im Chart
-        $labels = [];
-        $values = [];
-        for ($i = 29; $i >= 0; $i--) {
-            $day = Carbon::now()->subDays($i)->toDateString();
-            $labels[] = Carbon::parse($day)->format('d.m');
-            $values[] = $chartData->get($day)->total ?? 0;
-        }
-
-        $stats = [
-            'total_registrations' => Registration::count(),
-            'checked_in_today'    => Checkin::whereDate('checked_in_at', today())->count(),
-            'members'             => Member::where('membership_status', 'active')->count(),
-            'guests_today'        => Checkin::whereDate('checked_in_at', today())
-                // HIER WAR VORHER member_type, DAS HAT GEPASST
-                ->whereHas('registration', fn($q) => $q->where('member_type', 'guest'))
-                ->count(),
-        ];
-
-        return view('admin.index', compact('registrations', 'labels', 'values', 'stats'));
-    }
-
-    // ── Registrierung löschen ──────────────────────────────
-    public function destroyRegistration(Registration $registration)
-    {
-        // Checkins mitlöschen
-        $registration->checkins()->delete();
-        $registration->delete();
-
-        return back()->with('success', 'Registrierung wurde gelöscht.');
-    }
-
-    // ── Mitglieder CSV-Import ──────────────────────────────
-
-    public function importMembers(Request $request)
-    {
-        $request->validate([
-            'members_csv' => ['nullable', 'file', 'mimes:csv,txt'],
-            'confirm_missing_count' => ['nullable', 'integer'],
-            'stored_csv_path' => ['nullable', 'string'],
-        ]);
-    
-        $storedPath = null;
-        $deleteStoredFile = false;
-    
-        if ($request->hasFile('members_csv')) {
-            $storedPath = $request->file('members_csv')->store('imports');
-            $deleteStoredFile = true;
-    
-            if (!$storedPath) {
-                return redirect()
-                    ->route('admin.index')
-                    ->with('error', 'CSV konnte nicht sicher gespeichert werden.');
-            }
-        } elseif ($request->filled('stored_csv_path')) {
-            $storedPath = $request->input('stored_csv_path');
-    
-            if (!Storage::exists($storedPath)) {
-                return redirect()
-                    ->route('admin.index')
-                    ->with('error', 'Die zwischengespeicherte CSV wurde nicht gefunden. Bitte Datei erneut auswählen.');
-            }
-    
-            $deleteStoredFile = true;
-        } else {
-            return redirect()
-                ->route('admin.index')
-                ->with('error', 'Bitte CSV-Datei auswählen.');
-        }
-    
-        $fullPath = Storage::path($storedPath);
-        $handle = fopen($fullPath, 'r');
-    
-        if (!$handle) {
-            if ($deleteStoredFile && Storage::exists($storedPath)) {
-                Storage::delete($storedPath);
-            }
-    
-            return redirect()
-                ->route('admin.index')
-                ->with('error', 'CSV konnte nicht geöffnet werden.');
-        }
-    
-        try {
-            $headers = fgetcsv($handle, 0, ';');
-    
-            if (!$headers) {
-                return redirect()
-                    ->route('admin.index')
-                    ->with('error', 'CSV konnte nicht gelesen werden.')
-                    ->with('stored_csv_path', $storedPath);
-            }
-    
-            $headers[0] = preg_replace('/^\xEF\xBB\xBF/', '', $headers[0]);
-    
-            if (!in_array('Mitgliedsnummer', $headers, true)) {
-                return redirect()
-                    ->route('admin.index')
-                    ->with('error', 'CSV-Format ungültig: Spalte "Mitgliedsnummer" fehlt.')
-                    ->with('stored_csv_path', $storedPath);
-            }
-    
-            $imported = 0;
-            $importedMemberNumbers = [];
-    
-            while (($row = fgetcsv($handle, 0, ';')) !== false) {
-                if (count($row) !== count($headers)) {
-                    continue;
-                }
-    
-                $data = array_combine($headers, $row);
-    
-                $memberNumber = trim($data['Mitgliedsnummer'] ?? '');
-    
-                if ($memberNumber === '') {
-                    continue;
-                }
-    
-                $importedMemberNumbers[] = $memberNumber;
-    
-                $betragOffen = (float) str_replace(',', '.', trim((string) ($data['Betrag offen'] ?? '0')));
-                $paymentStatus = $betragOffen > 0 ? 'overdue' : 'paid';
-    
-                $birthDate = $this->parseCsvDate($data['Geburtsdatum'] ?? null);
-                $exitDate = $this->parseCsvDate($data['Austrittsdatum'] ?? null);
-    
-                $csvStatus = strtolower(trim((string) ($data['Status'] ?? '')));
-                $inactiveStatuses = ['gelöscht', 'ausgetreten', 'gesperrt', 'inaktiv', 'gekündigt'];
-    
-                $membershipStatus = 'active';
-                if (in_array($csvStatus, $inactiveStatuses, true)) {
-                    $membershipStatus = 'inactive';
-                } elseif ($exitDate && $exitDate->isPast()) {
-                    $membershipStatus = 'inactive';
-                }
-    
-                Member::updateOrCreate(
-                    ['member_number' => $memberNumber],
-                    [
-                        'first_name' => trim((string) ($data['Vorname'] ?? '')),
-                        'last_name' => trim((string) ($data['Nachname'] ?? '')),
-                        'email' => $this->nullIfEmpty($data['Email'] ?? null),
-                        'birth_date' => $birthDate?->format('Y-m-d'),
-                        'membership_status' => $membershipStatus,
-                        'payment_status' => $paymentStatus,
-                        'last_imported_at' => now(),
-                    ]
-                );
-    
-                Registration::where('member_type', 'guest')
-                    ->whereRaw('LOWER(last_name) = ?', [strtolower(trim((string) ($data['Nachname'] ?? '')))])
-                    ->where('birth_date', $birthDate?->format('Y-m-d'))
-                    ->update([
-                        'member_type' => 'member',
-                        'member_number' => $memberNumber,
-                    ]);
-    
-                Registration::where('member_number', $memberNumber)->update([
-                    'payment_status' => $paymentStatus,
-                ]);
-    
-                if ($membershipStatus === 'inactive') {
-                    Registration::where('member_number', $memberNumber)->update([
-                        'access_status' => 'red',
-                        'access_reason' => 'Mitgliedschaft inaktiv',
-                    ]);
-                } elseif ($paymentStatus === 'overdue') {
-                    Registration::where('member_number', $memberNumber)->update([
-                        'access_status' => 'orange',
-                        'access_reason' => 'Beitrag offen',
-                    ]);
-                } else {
-                    Registration::where('member_number', $memberNumber)->update([
-                        'access_status' => 'green',
-                        'access_reason' => 'Mitgliedschaft aktiv & bezahlt',
-                    ]);
-                }
-    
-                $imported++;
-            }
-    
-            if ($imported === 0) {
-                return redirect()
-                    ->route('admin.index')
-                    ->with('error', 'CSV wurde gelesen, aber es konnten keine Datensätze importiert werden.')
-                    ->with('stored_csv_path', $storedPath);
-            }
-    
-            $importedMemberNumbers = array_values(array_unique($importedMemberNumbers));
-    
-            $missingMemberNumbers = Member::query()
-                ->whereNotIn('member_number', $importedMemberNumbers)
-                ->pluck('member_number');
-    
-            $missingCount = $missingMemberNumbers->count();
-    
-            if ($missingCount > 0 && (int) $request->input('confirm_missing_count') !== $missingCount) {
-                $deleteStoredFile = false;
-    
-                return redirect()
-                    ->route('admin.index')
-                    ->with('warning', "Import abgebrochen: {$missingCount} bestehende Mitglieder fehlen in der CSV. Bitte Import erneut starten und diese Anzahl explizit bestätigen.")
-                    ->with('confirm_missing_count_required', $missingCount)
-                    ->with('stored_csv_path', $storedPath);
-            }
-    
-            if ($missingCount > 0) {
-                Member::whereIn('member_number', $missingMemberNumbers)->update([
-                    'membership_status' => 'inactive',
-                    'last_imported_at' => now(),
-                ]);
-    
-                Registration::whereIn('member_number', $missingMemberNumbers)->update([
-                    'payment_status' => 'overdue',
-                    'access_status' => 'red',
-                    'access_reason' => 'Mitgliedschaft inaktiv',
-                ]);
-            }
-    
-            return redirect()
-                ->route('admin.index')
-                ->with('success', "Mitgliederimport abgeschlossen: {$imported} Datensätze verarbeitet.");
-        } finally {
-            fclose($handle);
-    
-            if ($deleteStoredFile && $storedPath && Storage::exists($storedPath)) {
-                Storage::delete($storedPath);
-            }
-        }
-    }
-
-    // ── Checkins CSV-Export ────────────────────────────────
-    public function exportCheckins(Request $request)
-    {
-        $from = $request->input('from') ? Carbon::parse($request->input('from'))->startOfDay() : Carbon::now()->subDays(30)->startOfDay();
-        $to   = $request->input('to')   ? Carbon::parse($request->input('to'))->endOfDay()     : Carbon::now()->endOfDay();
-    
-        $checkins = Checkin::with('registration')
-            ->whereBetween('checked_in_at', [$from, $to])
-            ->orderBy('checked_in_at')
-            ->get();
-    
-        $filename = 'checkins_' . $from->format('Ymd') . '_' . $to->format('Ymd') . '.csv';
-    
-        $headers = [
-            'Content-Type'        => 'text/csv; charset=UTF-8',
-            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
-        ];
-    
-        $callback = function () use ($checkins) {
-            $handle = fopen('php://output', 'w');
-            fwrite($handle, "\xEF\xBB\xBF");
-    
-            fputcsv($handle, [
-                'Check-in ID',
-                'Vorname',
-                'Nachname',
-                'Geburtsdatum',
-                'Mitgliedstyp',
-                'Mitgliedsnummer',
-                'Check-in Zeit',
-                'Ampelstatus',
-                'Zugangsstatus-Grund',
-                'Schnupperbesuche',
-                'Aufsicht erforderlich',
-            ], ';');
-    
-            foreach ($checkins as $c) {
-                $reg = $c->registration;
-    
-                fputcsv($handle, [
-                    $c->id,
-                    $reg->first_name  ?? '',
-                    $reg->last_name   ?? '',
-                    $reg->birth_date  ? Carbon::parse($reg->birth_date)->format('d.m.Y') : '',
-                    $reg->member_type === 'member' ? 'Mitglied' : 'Gast',
-                    $reg->member_number ?? '',
-                    Carbon::parse($c->checked_in_at)->format('d.m.Y H:i'),
-                    $reg->access_status ?? '',
-                    $reg->access_reason ?? '',
-                    $reg->member_type === 'guest' ? ($reg->trial_visits_count ?? 0) : '',
-                    $reg->needs_supervision ? 'Ja' : 'Nein',
-                ], ';');
-            }
-    
-            fclose($handle);
-        };
-    
-        return response()->stream($callback, 200, $headers);
-    }
-
-    private function parseCsvDate(?string $value): ?Carbon
-    {
-        $value = trim((string) $value);
-
-        if ($value === '') {
-            return null;
-        }
-
-        try {
-            return Carbon::createFromFormat('d.m.Y', $value);
-        } catch (\Throwable $e) {
-            return null;
-        }
-    }
-
-    private function nullIfEmpty(?string $value): ?string
-    {
-        $value = trim((string) $value);
-
-        return $value === '' ? null : $value;
-    }
-}
 ````
 
 ## File: app/Http/Controllers/RegistrationController.php
@@ -8907,6 +8608,374 @@ class RegistrationController extends Controller
             return response()->json(['success' => true, 'message' => $message]);
         }
         return redirect()->route('verify', $registration->qr_token)->with('success', $message);
+    }
+}
+````
+
+## File: app/Http/Controllers/AdminController.php
+````php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Registration;
+use App\Models\Member;
+use App\Models\Checkin;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Http\RedirectResponse;
+
+class AdminController extends Controller
+{
+    // ── Dashboard ──────────────────────────────────────────
+    public function index()
+    {
+        $registrations = Registration::withCount('checkins')
+            ->orderByDesc('created_at')
+            ->paginate(30);
+
+        // Hallenauslastung: Checkins pro Tag (letzte 30 Tage)
+        $chartData = Checkin::select(
+                DB::raw('DATE(checked_in_at) as day'),
+                DB::raw('COUNT(*) as total')
+            )
+            ->where('checked_in_at', '>=', Carbon::now()->subDays(29)->startOfDay())
+            ->groupBy('day')
+            ->orderBy('day')
+            ->get()
+            ->keyBy('day');
+
+        // Auffüllen: auch Tage ohne Check-ins erscheinen im Chart
+        $labels = [];
+        $values = [];
+        for ($i = 29; $i >= 0; $i--) {
+            $day = Carbon::now()->subDays($i)->toDateString();
+            $labels[] = Carbon::parse($day)->format('d.m');
+            $values[] = $chartData->get($day)->total ?? 0;
+        }
+
+        $stats = [
+            'total_registrations' => Registration::count(),
+            'checked_in_today'    => Checkin::whereDate('checked_in_at', today())->count(),
+            'members'             => Member::where('membership_status', 'active')->count(),           // ✅ Members-Tabelle
+            'guests_today'        => Checkin::whereDate('checked_in_at', today())
+                ->whereHas('registration', fn($q) => $q->where('member_type', 'guest'))
+                ->count(),
+            'inactive_members'    => Member::where('membership_status', 'inactive')->count(),       // ✅ Members-Tabelle!
+        ];
+
+        return view('admin.index', compact('registrations', 'labels', 'values', 'stats'));
+    }
+
+    // ── Registrierung löschen ──────────────────────────────
+    public function destroyRegistration(Registration $registration)
+    {
+        // Checkins mitlöschen
+        $registration->checkins()->delete();
+        $registration->delete();
+
+        return back()->with('success', 'Registrierung wurde gelöscht.');
+    }
+
+    // ── Mitglieder CSV-Import ──────────────────────────────
+
+    public function importMembers(Request $request)
+    {
+        $request->validate([
+            'members_csv' => ['nullable', 'file', 'mimes:csv,txt'],
+            'confirm_missing_count' => ['nullable', 'integer'],
+            'stored_csv_path' => ['nullable', 'string'],
+        ]);
+    
+        $storedPath = null;
+        $deleteStoredFile = false;
+    
+        if ($request->hasFile('members_csv')) {
+            $storedPath = $request->file('members_csv')->store('imports');
+            $deleteStoredFile = true;
+    
+            if (!$storedPath) {
+                return redirect()
+                    ->route('admin.index')
+                    ->with('error', 'CSV konnte nicht sicher gespeichert werden.');
+            }
+        } elseif ($request->filled('stored_csv_path')) {
+            $storedPath = $request->input('stored_csv_path');
+    
+            if (!Storage::exists($storedPath)) {
+                return redirect()
+                    ->route('admin.index')
+                    ->with('error', 'Die zwischengespeicherte CSV wurde nicht gefunden. Bitte Datei erneut auswählen.');
+            }
+    
+            $deleteStoredFile = true;
+        } else {
+            return redirect()
+                ->route('admin.index')
+                ->with('error', 'Bitte CSV-Datei auswählen.');
+        }
+    
+        $fullPath = Storage::path($storedPath);
+        $handle = fopen($fullPath, 'r');
+    
+        if (!$handle) {
+            if ($deleteStoredFile && Storage::exists($storedPath)) {
+                Storage::delete($storedPath);
+            }
+    
+            return redirect()
+                ->route('admin.index')
+                ->with('error', 'CSV konnte nicht geöffnet werden.');
+        }
+    
+        try {
+            $headers = fgetcsv($handle, 0, ';');
+    
+            if (!$headers) {
+                return redirect()
+                    ->route('admin.index')
+                    ->with('error', 'CSV konnte nicht gelesen werden.')
+                    ->with('stored_csv_path', $storedPath);
+            }
+    
+            $headers[0] = preg_replace('/^\xEF\xBB\xBF/', '', $headers[0]);
+    
+            if (!in_array('Mitgliedsnummer', $headers, true)) {
+                return redirect()
+                    ->route('admin.index')
+                    ->with('error', 'CSV-Format ungültig: Spalte "Mitgliedsnummer" fehlt.')
+                    ->with('stored_csv_path', $storedPath);
+            }
+    
+            $imported = 0;
+            $importedMemberNumbers = [];
+    
+            while (($row = fgetcsv($handle, 0, ';')) !== false) {
+                if (count($row) !== count($headers)) {
+                    continue;
+                }
+    
+                $data = array_combine($headers, $row);
+    
+                $memberNumber = trim($data['Mitgliedsnummer'] ?? '');
+    
+                if ($memberNumber === '') {
+                    continue;
+                }
+    
+                $importedMemberNumbers[] = $memberNumber;
+    
+                $betragOffen = (float) str_replace(',', '.', trim((string) ($data['Betrag offen'] ?? '0')));
+                $paymentStatus = $betragOffen > 0 ? 'overdue' : 'paid';
+    
+                $birthDate = $this->parseCsvDate($data['Geburtsdatum'] ?? null);
+                $exitDate = $this->parseCsvDate($data['Austrittsdatum'] ?? null);
+    
+                $csvStatus = strtolower(trim((string) ($data['Status'] ?? '')));
+                $inactiveStatuses = ['gelöscht', 'ausgetreten', 'gesperrt', 'inaktiv', 'gekündigt'];
+    
+                $membershipStatus = 'active';
+                if (in_array($csvStatus, $inactiveStatuses, true)) {
+                    $membershipStatus = 'inactive';
+                } elseif ($exitDate && $exitDate->isPast()) {
+                    $membershipStatus = 'inactive';
+                }
+    
+                Member::updateOrCreate(
+                    ['member_number' => $memberNumber],
+                    [
+                        'first_name' => trim((string) ($data['Vorname'] ?? '')),
+                        'last_name' => trim((string) ($data['Nachname'] ?? '')),
+                        'email' => $this->nullIfEmpty($data['Email'] ?? null),
+                        'birth_date' => $birthDate?->format('Y-m-d'),
+                        'membership_status' => $membershipStatus,
+                        'payment_status' => $paymentStatus,
+                        'last_imported_at' => now(),
+                    ]
+                );
+    
+                Registration::where('member_type', 'guest')
+                    ->whereRaw('LOWER(last_name) = ?', [strtolower(trim((string) ($data['Nachname'] ?? '')))])
+                    ->where('birth_date', $birthDate?->format('Y-m-d'))
+                    ->update([
+                        'member_type' => 'member',
+                        'member_number' => $memberNumber,
+                    ]);
+    
+                Registration::where('member_number', $memberNumber)->update([
+                    'payment_status' => $paymentStatus,
+                ]);
+    
+                if ($membershipStatus === 'inactive') {
+                    Registration::where('member_number', $memberNumber)->update([
+                        'access_status' => 'red',
+                        'access_reason' => 'Mitgliedschaft inaktiv',
+                    ]);
+                } elseif ($paymentStatus === 'overdue') {
+                    Registration::where('member_number', $memberNumber)->update([
+                        'access_status' => 'orange',
+                        'access_reason' => 'Beitrag offen',
+                    ]);
+                } else {
+                    Registration::where('member_number', $memberNumber)->update([
+                        'access_status' => 'green',
+                        'access_reason' => 'Mitgliedschaft aktiv & bezahlt',
+                    ]);
+                }
+    
+                $imported++;
+            }
+    
+            if ($imported === 0) {
+                return redirect()
+                    ->route('admin.index')
+                    ->with('error', 'CSV wurde gelesen, aber es konnten keine Datensätze importiert werden.')
+                    ->with('stored_csv_path', $storedPath);
+            }
+    
+            $importedMemberNumbers = array_values(array_unique($importedMemberNumbers));
+    
+            $missingMemberNumbers = Member::query()
+                ->whereNotIn('member_number', $importedMemberNumbers)
+                ->pluck('member_number');
+    
+            $missingCount = $missingMemberNumbers->count();
+    
+            if ($missingCount > 0 && (int) $request->input('confirm_missing_count') !== $missingCount) {
+                $deleteStoredFile = false;
+    
+                return redirect()
+                    ->route('admin.index')
+                    ->with('warning', "Import abgebrochen: {$missingCount} bestehende Mitglieder fehlen in der CSV. Bitte Import erneut starten und diese Anzahl explizit bestätigen.")
+                    ->with('confirm_missing_count_required', $missingCount)
+                    ->with('stored_csv_path', $storedPath);
+            }
+    
+            if ($missingCount > 0) {
+                Member::whereIn('member_number', $missingMemberNumbers)->update([
+                    'membership_status' => 'inactive',
+                    'last_imported_at' => now(),
+                ]);
+    
+                Registration::whereIn('member_number', $missingMemberNumbers)->update([
+                    'payment_status' => 'overdue',
+                    'access_status' => 'red',
+                    'access_reason' => 'Mitgliedschaft inaktiv',
+                ]);
+            }
+    
+            return redirect()
+                ->route('admin.index')
+                ->with('success', "Mitgliederimport abgeschlossen: {$imported} Datensätze verarbeitet.");
+        } finally {
+            fclose($handle);
+    
+            if ($deleteStoredFile && $storedPath && Storage::exists($storedPath)) {
+                Storage::delete($storedPath);
+            }
+        }
+    }
+    
+    // ── Inaktive Mitglieder löschen ────────────────────────
+    public function deleteInactiveMembers(): RedirectResponse
+    {
+        $memberNumbers = Member::where('membership_status', 'inactive')
+            ->pluck('member_number');
+    
+        $registrationIds = Registration::whereIn('member_number', $memberNumbers)
+            ->pluck('id');
+    
+        Checkin::whereIn('registration_id', $registrationIds)->delete();
+        Registration::whereIn('id', $registrationIds)->delete();
+        Member::whereIn('member_number', $memberNumbers)->delete();
+    
+        return redirect()
+            ->route('admin.index')
+            ->with('success', $memberNumbers->count() . ' inaktive Mitglieder gelöscht.');
+    }
+
+    // ── Checkins CSV-Export ────────────────────────────────
+    public function exportCheckins(Request $request)
+    {
+        $from = $request->input('from') ? Carbon::parse($request->input('from'))->startOfDay() : Carbon::now()->subDays(30)->startOfDay();
+        $to   = $request->input('to')   ? Carbon::parse($request->input('to'))->endOfDay()     : Carbon::now()->endOfDay();
+    
+        $checkins = Checkin::with('registration')
+            ->whereBetween('checked_in_at', [$from, $to])
+            ->orderBy('checked_in_at')
+            ->get();
+    
+        $filename = 'checkins_' . $from->format('Ymd') . '_' . $to->format('Ymd') . '.csv';
+    
+        $headers = [
+            'Content-Type'        => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ];
+    
+        $callback = function () use ($checkins) {
+            $handle = fopen('php://output', 'w');
+            fwrite($handle, "\xEF\xBB\xBF");
+    
+            fputcsv($handle, [
+                'Check-in ID',
+                'Vorname',
+                'Nachname',
+                'Geburtsdatum',
+                'Mitgliedstyp',
+                'Mitgliedsnummer',
+                'Check-in Zeit',
+                'Ampelstatus',
+                'Zugangsstatus-Grund',
+                'Schnupperbesuche',
+                'Aufsicht erforderlich',
+            ], ';');
+    
+            foreach ($checkins as $c) {
+                $reg = $c->registration;
+    
+                fputcsv($handle, [
+                    $c->id,
+                    $reg->first_name  ?? '',
+                    $reg->last_name   ?? '',
+                    $reg->birth_date  ? Carbon::parse($reg->birth_date)->format('d.m.Y') : '',
+                    $reg->member_type === 'member' ? 'Mitglied' : 'Gast',
+                    $reg->member_number ?? '',
+                    Carbon::parse($c->checked_in_at)->format('d.m.Y H:i'),
+                    $reg->access_status ?? '',
+                    $reg->access_reason ?? '',
+                    $reg->member_type === 'guest' ? ($reg->trial_visits_count ?? 0) : '',
+                    $reg->needs_supervision ? 'Ja' : 'Nein',
+                ], ';');
+            }
+    
+            fclose($handle);
+        };
+    
+        return response()->stream($callback, 200, $headers);
+    }
+
+    private function parseCsvDate(?string $value): ?Carbon
+    {
+        $value = trim((string) $value);
+
+        if ($value === '') {
+            return null;
+        }
+
+        try {
+            return Carbon::createFromFormat('d.m.Y', $value);
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    private function nullIfEmpty(?string $value): ?string
+    {
+        $value = trim((string) $value);
+
+        return $value === '' ? null : $value;
     }
 }
 ````
