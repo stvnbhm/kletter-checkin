@@ -38,15 +38,11 @@
                 </div>
             @endif
 
-            {{-- ── KPI-Karten ──────────────────────────────────────── --}}
+           {{-- ── KPI-Karten ──────────────────────────────────────── --}}
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
                     <div class="text-3xl font-bold text-teal-600">{{ $stats['checked_in_today'] }}</div>
                     <div class="text-sm text-gray-500 mt-1">Heute eingecheckt</div>
-                </div>
-                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
-                    <div class="text-3xl font-bold text-blue-500">{{ $stats['guests_today'] }}</div>
-                    <div class="text-sm text-gray-500 mt-1">Davon Gäste heute</div>
                 </div>
                 <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
                     <div class="text-3xl font-bold text-gray-700">{{ $stats['total_registrations'] }}</div>
@@ -56,8 +52,12 @@
                     <div class="text-3xl font-bold text-purple-500">{{ $stats['members'] }}</div>
                     <div class="text-sm text-gray-500 mt-1">Aktive Mitglieder</div>
                 </div>
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center">
+                    <div class="text-3xl font-bold text-red-400">{{ $stats['inactive_members'] }}</div>
+                    <div class="text-sm text-gray-500 mt-1">Inaktive Mitglieder</div>
+                </div>
             </div>
-
+            
             {{-- ── Hallenauslastung Chart ───────────────────────────── --}}
             <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                 <h3 class="text-lg font-semibold text-gray-700 mb-4">📊 Hallenauslastung – letzte 30 Tage</h3>

@@ -44,8 +44,10 @@ class AdminController extends Controller
             'checked_in_today'    => Checkin::whereDate('checked_in_at', today())->count(),
             'members'             => Member::where('membership_status', 'active')->count(),
             'guests_today'        => Checkin::whereDate('checked_in_at', today())
-                // HIER WAR VORHER member_type, DAS HAT GEPASST
                 ->whereHas('registration', fn($q) => $q->where('member_type', 'guest'))
+                ->count(),
+            'inactive_members' => Registration::where('member_type', 'member')
+                ->where('membership_status', 'inactive')
                 ->count(),
         ];
 
