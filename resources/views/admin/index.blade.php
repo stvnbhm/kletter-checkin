@@ -59,7 +59,7 @@
             <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                 <h3 class="text-lg font-semibold text-gray-700 mb-4">📊 Hallenauslastung – letzte 30 Tage</h3>
                 <div class="relative" style="height: 220px;">
-                    <canvas id="auslastungChart"></canvas>
+                    <canvas id="auslastungChart" style="pointer-events: none;"></canvas>
                 </div>
             </div>
 
@@ -127,7 +127,7 @@
                         {{-- Submit-Button mit Doppelklick-Schutz --}}
                         <button id="importBtn" type="submit"
                             class="w-full bg-teal-600 hover:bg-teal-700 disabled:bg-teal-300 disabled:cursor-not-allowed
-                                   text-white text-sm font-semibold py-2 px-4 rounded-lg transition flex items-center justify-center gap-2">
+                                   text-white text-sm font-semibold py-2 px-4 rounded-lg transition flex items-center justify-center gap-2 min-h-[44px]">
                             <span id="importBtnText">Importieren</span>
                             <svg id="importSpinner" class="hidden animate-spin h-4 w-4 text-white"
                                  xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -163,25 +163,25 @@
                             </div>
                         </div>
                         <button type="submit"
-                            class="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold py-2 px-4 rounded-lg transition">
+                            class="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold py-2 px-4 rounded-lg transition min-h-[44px]">
                             CSV herunterladen
                         </button>
                     </form>
 
                     {{-- ── Inaktive Mitglieder löschen ── --}}
-                    <div class="border-t border-gray-100 pt-4 mt-auto relative z-20">
+                    <div class="border-t border-gray-100 pt-4 mt-auto">
                         <h4 class="text-sm font-semibold text-gray-600 mb-1">🗑️ Inaktive Mitglieder entfernen</h4>
                         <p class="text-xs text-gray-400 mb-3">
                             Löscht alle Registrierungen mit <code class="font-mono bg-gray-100 px-1 rounded">membership_status = inactive</code>
                             dauerhaft aus der Datenbank inkl. ihrer Check-ins.
                         </p>
                         <form action="{{ route('admin.deleteInactiveMembers') }}" method="POST"
-                              onsubmit="return confirm('Alle inaktiven Mitglieder ({{ $stats['inactive_members'] }}) wirklich dauerhaft löschen? Diese Aktion kann nicht rückgängig gemacht werden.')">
+                              onsubmit="askConfirm('Alle {{ $stats[\'inactive_members\'] }} inaktiven Mitglieder wirklich dauerhaft löschen? Diese Aktion kann nicht rückgängig gemacht werden.', this); return false;">
                             @csrf
                             @method('DELETE')
                             <button type="submit"
-                                class="w-full bg-red-50 hover:bg-red-100 border border-red-200 text-red-700
-                                       text-sm font-semibold py-2 px-4 rounded-lg transition min-h-[44px] relative z-20 touch-manipulation">
+                                class="w-full bg-red-50 hover:bg-red-100 active:bg-red-200 border border-red-200 text-red-700
+                                       text-sm font-semibold py-2 px-4 rounded-lg transition min-h-[44px] touch-manipulation cursor-pointer">
                                 {{ $stats['inactive_members'] }} inaktive Mitglieder löschen
                             </button>
                         </form>
@@ -240,11 +240,14 @@
                                     <td class="px-4 py-3 text-gray-600 tabular-nums">{{ $reg->checkins_count ?? $reg->checkins->count() }}</td>
                                     <td class="px-4 py-3 text-gray-400 text-xs">{{ $reg->created_at->format('d.m.Y H:i') }}</td>
                                     <td class="px-4 py-3">
+                                        @php
+                                            $regName = addslashes($reg->first_name . ' ' . $reg->last_name);
+                                        @endphp
                                         <form action="{{ route('admin.registrations.destroy', $reg) }}" method="POST"
-                                              onsubmit="return confirm('Registrierung von {{ addslashes($reg->first_name . ' ' . $reg->last_name) }} wirklich löschen? Alle Check-ins werden mitgelöscht.')">
+                                              onsubmit="askConfirm('Registrierung von {{ $regName }} wirklich löschen? Alle Check-ins werden mitgelöscht.', this); return false;">
                                             @csrf
                                             @method('DELETE')
-                                            <button type="submit" class="text-xs text-red-500 hover:text-red-700 hover:underline transition">
+                                            <button type="submit" class="text-xs text-red-500 hover:text-red-700 hover:underline transition touch-manipulation">
                                                 Löschen
                                             </button>
                                         </form>
@@ -272,16 +275,17 @@
                                     @if ($reg->member_number) · {{ $reg->member_number }} @endif
                                     · {{ $reg->checkins->count() }} Check-ins
                                 </div>
-                                @php $colors = ['green'=>'text-green-600','blue'=>'text-blue-500','orange'=>'text-orange-500','red'=>'text-red-500']; @endphp
-                                <div class="text-xs font-medium mt-1 {{ $colors[$reg->access_status] ?? 'text-gray-500' }}">
+                                @php $colorsMobile = ['green'=>'text-green-600','blue'=>'text-blue-500','orange'=>'text-orange-500','red'=>'text-red-500']; @endphp
+                                <div class="text-xs font-medium mt-1 {{ $colorsMobile[$reg->access_status] ?? 'text-gray-500' }}">
                                     ● {{ $reg->access_status }}
                                 </div>
                             </div>
+                            @php $regNameMobile = addslashes($reg->first_name . ' ' . $reg->last_name); @endphp
                             <form action="{{ route('admin.registrations.destroy', $reg) }}" method="POST"
-                                  onsubmit="return confirm('Wirklich löschen?')">
+                                  onsubmit="askConfirm('Registrierung von {{ $regNameMobile }} wirklich löschen?', this); return false;">
                                 @csrf
                                 @method('DELETE')
-                                <button type="submit" class="text-xs text-red-400 hover:text-red-600 shrink-0">🗑️</button>
+                                <button type="submit" class="text-xs text-red-400 hover:text-red-600 shrink-0 min-h-[44px] min-w-[44px] flex items-center justify-center touch-manipulation">🗑️</button>
                             </form>
                         </div>
                     @empty
@@ -300,10 +304,58 @@
         </div>
     </main>
 
+    {{-- ── Bestätigungs-Modal (ersetzt alle confirm()-Dialoge) ── --}}
+    <div id="confirmModal"
+         class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+         onclick="if(event.target===this) closeConfirm()">
+        <div class="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full">
+            <p id="confirmMessage" class="text-sm text-gray-800 mb-5 font-medium leading-relaxed"></p>
+            <div class="flex gap-3 justify-end">
+                <button onclick="closeConfirm()"
+                        class="px-4 py-2 text-sm rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 transition min-h-[44px] touch-manipulation">
+                    Abbrechen
+                </button>
+                <button id="confirmOkBtn"
+                        class="px-4 py-2 text-sm rounded-lg bg-red-600 text-white font-semibold hover:bg-red-700 transition min-h-[44px] touch-manipulation">
+                    Ja, löschen
+                </button>
+            </div>
+        </div>
+    </div>
+
     {{-- Chart.js --}}
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script>
-        // CSV Import: Doppelklick-Schutz
+        // ── Bestätigungs-Modal ──────────────────────────────────
+        let _pendingForm = null;
+
+        function askConfirm(msg, formEl) {
+            _pendingForm = formEl;
+            document.getElementById('confirmMessage').textContent = msg;
+            document.getElementById('confirmModal').classList.remove('hidden');
+        }
+
+        function closeConfirm() {
+            _pendingForm = null;
+            document.getElementById('confirmModal').classList.add('hidden');
+        }
+
+        document.getElementById('confirmOkBtn').addEventListener('click', function () {
+            if (_pendingForm) {
+                // Doppelklick-Schutz für Modal-Button
+                this.disabled = true;
+                this.textContent = '…';
+                _pendingForm.submit();
+            }
+            closeConfirm();
+        });
+
+        // Escape-Taste schließt Modal
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') closeConfirm();
+        });
+
+        // ── CSV Import: Doppelklick-Schutz ─────────────────────
         document.getElementById('importForm').addEventListener('submit', function () {
             const btn     = document.getElementById('importBtn');
             const text    = document.getElementById('importBtnText');
@@ -313,7 +365,7 @@
             spinner.classList.remove('hidden');
         });
 
-        // Auslastungs-Chart
+        // ── Auslastungs-Chart ───────────────────────────────────
         const labels = @json($labels);
         const values = @json($values);
 
