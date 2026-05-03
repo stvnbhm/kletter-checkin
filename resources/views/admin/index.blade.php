@@ -169,7 +169,7 @@
                     </form>
 
                     {{-- ── Inaktive Mitglieder löschen ── --}}
-                    <div class="border-t border-gray-100 pt-4 mt-auto">
+                    <div class="border-t border-gray-100 pt-4 mt-auto relative z-20">
                         <h4 class="text-sm font-semibold text-gray-600 mb-1">🗑️ Inaktive Mitglieder entfernen</h4>
                         <p class="text-xs text-gray-400 mb-3">
                             Löscht alle Registrierungen mit <code class="font-mono bg-gray-100 px-1 rounded">membership_status = inactive</code>
@@ -181,7 +181,7 @@
                             @method('DELETE')
                             <button type="submit"
                                 class="w-full bg-red-50 hover:bg-red-100 border border-red-200 text-red-700
-                                       text-sm font-semibold py-2 px-4 rounded-lg transition">
+                                       text-sm font-semibold py-2 px-4 rounded-lg transition min-h-[44px] relative z-20 touch-manipulation">
                                 {{ $stats['inactive_members'] }} inaktive Mitglieder löschen
                             </button>
                         </form>
