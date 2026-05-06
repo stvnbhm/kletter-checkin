@@ -193,8 +193,9 @@
                                         || $isUnverifiedMemberBlocked
                                         || $registration->access_status === 'red';
 
-                        $isOrangePending = $registration->access_status === 'orange'
-                                        && !$hasActiveKulanz;
+                        $isNeedsModal   = ($registration->access_status === 'orange'
+                                        && !$hasActiveKulanz)
+                                        || $isTrialLimitReached;
 
                         $kulanzHint = match (true) {
                             $registration->access_status === 'red' => 'Person gesperrt',
@@ -295,7 +296,7 @@
                                            cursor-not-allowed min-h-[44px]">
                                     Check-in
                                 </button>
-                            @elseif ($isOrangePending)
+                            @elseif ($isNeedsModal)
                                 {{-- Orange ohne aktive Kulanz → Modal --}}
                                 <form id="checkin-form-mob-{{ $registration->id }}"
                                       method="POST"
@@ -309,7 +310,8 @@
                                         document.getElementById('checkin-form-mob-{{ $registration->id }}'),
                                         document.getElementById('reason-mob-{{ $registration->id }}'),
                                         '{{ e($registration->first_name . ' ' . $registration->last_name) }}',
-                                        '{{ e($registration->access_reason ?? 'Kein Grund angegeben') }}'
+                                        '{{ e($registration->access_reason ?? 'Kein Grund angegeben') }}',
+                                        {{ $isTrialLimitReached ? 'true' : 'false' }}
                                     )"
                                     class="w-full inline-flex items-center justify-center border border-transparent
                                            bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold
@@ -375,8 +377,9 @@
                                                     || $isUnverifiedMemberBlocked
                                                     || $registration->access_status === 'red';
 
-                                    $isOrangePending = $registration->access_status === 'orange'
-                                                    && !$hasActiveKulanz;
+                                    $isNeedsModal   = ($registration->access_status === 'orange'
+                                                    && !$hasActiveKulanz)
+                                        || $isTrialLimitReached;
 
                                     $kulanzHint = match (true) {
                                         $registration->access_status === 'red' => 'Person gesperrt',
@@ -483,7 +486,7 @@
                                                        cursor-not-allowed">
                                                 Check-in
                                             </button>
-                                        @elseif ($isOrangePending)
+                                        @elseif ($isNeedsModal)
                                             {{-- Orange ohne aktive Kulanz → Modal --}}
                                             <form id="checkin-form-{{ $registration->id }}"
                                                   method="POST"
@@ -497,7 +500,8 @@
                                                     document.getElementById('checkin-form-{{ $registration->id }}'),
                                                     document.getElementById('reason-{{ $registration->id }}'),
                                                     '{{ e($registration->first_name . ' ' . $registration->last_name) }}',
-                                                    '{{ e($registration->access_reason ?? 'Kein Grund angegeben') }}'
+                                                    '{{ e($registration->access_reason ?? 'Kein Grund angegeben') }}',
+                                                    {{ $isTrialLimitReached ? 'true' : 'false' }}
                                                 )"
                                                 class="inline-flex items-center justify-center border border-transparent
                                                        bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold
@@ -559,7 +563,7 @@
                     {{-- Kulanzfeld (nur im Orange-Modus sichtbar) --}}
                     <div id="confirmOrangeKulanz" class="hidden">
                         <label for="confirmKulanzInput" class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                            Kulanzgrund <span class="font-normal normal-case text-gray-400">(optional)</span>
+                            Kulanzgrund <span id="confirmKulanzOptional" class="font-normal normal-case text-gray-400">(optional)</span>
                         </label>
                         <input type="text" id="confirmKulanzInput"
                             placeholder="z. B. Ausnahme genehmigt von …"
@@ -593,10 +597,12 @@
     // Confirm Modal (Alle auschecken + Orange-Check-in)
     let confirmForm = null;
     let orangeReasonInput = null;
+    let isModalKulanzRequired = false;
 
     function askConfirm(message, form) {
         confirmForm = form;
         orangeReasonInput = null;
+        isModalKulanzRequired = false;
         document.getElementById('confirmModalText').textContent = message;
         // Orange-Felder verstecken (normaler Modus)
         document.getElementById('confirmOrangeHint').classList.add('hidden');
@@ -613,16 +619,24 @@
         document.body.classList.add('overflow-hidden');
     }
 
-    function openOrangeCheckin(form, reasonInput, name, reason) {
+    function openOrangeCheckin(form, reasonInput, name, reason, isTrialLimit) {
         confirmForm = form;
         orangeReasonInput = reasonInput;
-        document.getElementById('confirmModalText').textContent =
-            '⚠️ ' + name + ' hat Status Orange. Trotzdem einchecken?';
+        isModalKulanzRequired = !!isTrialLimit;
+        const label = isTrialLimit
+            ? '⚠️ ' + name + ' hat das Schnupperlimit erreicht. Trotzdem einchecken?'
+            : '⚠️ ' + name + ' hat Status Orange. Trotzdem einchecken?';
+        document.getElementById('confirmModalText').textContent = label;
         // Orange-Felder einblenden
-        document.getElementById('confirmOrangeReason').textContent = reason;
+        const reasonLabel = isTrialLimit ? 'Schnupperlimit-Grund:' : 'Grund für Orange-Status:';
+        document.querySelector('#confirmOrangeHint span.font-semibold').textContent = '⚠️ ' + reasonLabel;
+        document.getElementById('confirmOrangeReason').textContent = reason || (isTrialLimit ? 'Schnuppergast hat bereits einen Besuch absolviert.' : 'Kein Grund angegeben');
         document.getElementById('confirmOrangeHint').classList.remove('hidden');
         document.getElementById('confirmOrangeKulanz').classList.remove('hidden');
         document.getElementById('confirmKulanzInput').value = '';
+        document.getElementById('confirmKulanzInput').classList.remove('border-red-500');
+        // Kulanzfeld: optional/pflicht je nach Modus
+        document.getElementById('confirmKulanzOptional').textContent = isTrialLimit ? '(Pflicht)' : '(optional)';
         // Button: indigo "Check-in"-Stil
         const okBtn = document.getElementById('confirmOkBtn');
         okBtn.disabled = false;
@@ -643,6 +657,7 @@
         document.body.classList.remove('overflow-hidden');
         confirmForm = null;
         orangeReasonInput = null;
+        isModalKulanzRequired = false;
         // Felder zurücksetzen
         document.getElementById('confirmOrangeHint').classList.add('hidden');
         document.getElementById('confirmOrangeKulanz').classList.add('hidden');
@@ -658,11 +673,17 @@
     document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('confirmOkBtn')?.addEventListener('click', function () {
             if (!confirmForm) return;
-            this.disabled = true;
-            // Kulanzwert in verstecktes Formular-Input schreiben
             if (orangeReasonInput) {
-                orangeReasonInput.value = document.getElementById('confirmKulanzInput').value;
+                const val = document.getElementById('confirmKulanzInput').value.trim();
+                if (isModalKulanzRequired && !val) {
+                    const inp = document.getElementById('confirmKulanzInput');
+                    inp.classList.add('border-red-500');
+                    inp.focus();
+                    return;
+                }
+                orangeReasonInput.value = val;
             }
+            this.disabled = true;
             confirmForm.submit();
         });
 
