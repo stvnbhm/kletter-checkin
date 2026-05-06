@@ -7026,58 +7026,63 @@ CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
 ````php
 <?php
 
-use App\Http\Controllers\AdminController;
-use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\RegistrationController;
 use App\Http\Controllers\StaffController;
+use App\Http\Controllers\AdminController;
+use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return view('welcome');
 });
 
-Route::get('/halle-register', [RegistrationController::class, 'create'])->name('register');
-Route::post('/halle-register', [RegistrationController::class, 'store'])
+Route::get('halle-register', [RegistrationController::class, 'create'])->name('register');
+Route::post('halle-register', [RegistrationController::class, 'store'])
     ->middleware('throttle:3,1')
     ->name('register.store');
-Route::get('/verify/{token}', [RegistrationController::class, 'verify'])->name('verify');
+
+Route::get('verify/{token}', [RegistrationController::class, 'verify'])->name('verify');
 
 // Angepasste Dashboard-Weiterleitung basierend auf der Rolle
-Route::get('/dashboard', function () {
+Route::get('dashboard', function () {
     if (auth()->check() && auth()->user()->is_admin) {
         return redirect()->route('admin.index');
     }
-    
     return redirect()->route('staff');
-})->middleware(['auth'])->name('dashboard');
+})->middleware('auth')->name('dashboard');
+
+// Alle geschützten Routen erfordern Login
+Route::middleware('auth')->group(function () {
+
+    // BEREICH FÜR ALLE (Staff + Admin)
+    Route::get('hallendienst', [StaffController::class, 'index'])->name('staff');
+
+    Route::post('hallendienst/{registration}/check-in',
+        [StaffController::class, 'checkin'])->name('staff.checkin');
+
+    Route::post('hallendienst/{registration}/parent-consent',
+        [StaffController::class, 'confirmParentConsent'])->name('staff.parent-consent');
+
+    Route::post('hallendienst/checkout-all',
+        [StaffController::class, 'checkoutAll'])->name('staff.checkout-all');
+
+    Route::post('hallendienst/import-members',
+        [StaffController::class, 'importMembers'])->name('staff.importMembers');
+
+    // QR-Code Check-in (Self-Service)
+    Route::post('verify/{token}/checkin',
+        [RegistrationController::class, 'checkin'])->name('verify.checkin');
+});
+
+// EXKLUSIVER ADMIN-BEREICH
+Route::middleware('admin')->prefix('admin')->name('admin.')->group(function () {
+    Route::get('/', [AdminController::class, 'index'])->name('index');
+    Route::post('import-members', [AdminController::class, 'importMembers'])->name('importMembers');
+    Route::get('export-checkins', [AdminController::class, 'exportCheckins'])->name('exportCheckins');
+    Route::delete('registrations/{registration}', [AdminController::class, 'destroyRegistration'])->name('registrations.destroy');
+    Route::delete('inactive-members', [AdminController::class, 'deleteInactiveMembers'])->name('deleteInactiveMembers');
+});
 
 require __DIR__ . '/auth.php';
-
-// Alle geschützten Routen (erfordern Login)
-Route::middleware(['auth'])->group(function () {
-    
-    // ==========================================
-    // BEREICH FÜR ALLE (Staff & Admin)
-    // ==========================================
-    Route::get('/hallendienst', [StaffController::class, 'index'])->name('staff');
-    Route::post('/hallendienst/check-in/{registration}', [StaffController::class, 'checkin'])->name('staff.checkin');
-    Route::post('/hallendienst/import-members', [StaffController::class, 'importMembers'])->name('staff.importMembers');
-    Route::post('/hallendienst/kulanz/{registration}', [StaffController::class, 'grantKulanz'])->name('staff.kulanz');
-    Route::post('/hallendienst/{registration}/kulanz-checkin', [StaffController::class, 'kulanzCheckin'])->name('staff.kulanz-checkin');
-    Route::post('/hallendienst/{registration}/parent-consent', [StaffController::class, 'confirmParentConsent'])->name('staff.parent-consent');
-    Route::post('/hallendienst/checkout-all', [StaffController::class, 'checkoutAll'])->name('staff.checkout-all');
-    Route::post('/verify/{token}/checkin', [RegistrationController::class, 'checkin'])->name('verify.checkin');
-    
-    // ==========================================
-    // EXKLUSIVER ADMIN-BEREICH
-    // ==========================================
-    Route::middleware(['admin'])->prefix('admin')->name('admin.')->group(function () {
-        Route::get('/', [AdminController::class, 'index'])->name('index');
-        Route::post('/import-members', [AdminController::class, 'importMembers'])->name('importMembers');
-        Route::get('/export-checkins', [AdminController::class, 'exportCheckins'])->name('exportCheckins');
-        Route::delete('/registrations/{registration}', [AdminController::class, 'destroyRegistration'])->name('registrations.destroy');
-        Route::delete('/inactive-members', [AdminController::class, 'deleteInactiveMembers'])->name('deleteInactiveMembers');
-    });
-});
 ````
 
 ## File: app/Http/Controllers/StaffController.php
@@ -7087,124 +7092,126 @@ Route::middleware(['auth'])->group(function () {
 namespace App\Http\Controllers;
 
 use App\Models\Checkin;
-use App\Models\Member;
 use App\Models\Registration;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 
 class StaffController extends Controller
 {
     public function index(Request $request)
     {
         $query = $request->input('q');
-    
+
         $registrations = Registration::with('member', 'currentCheckin')
             ->when($query, function ($q) use ($query) {
                 $q->where(function ($sub) use ($query) {
-                    $sub->where('first_name', 'like', "%$query%")
-                        ->orWhere('last_name', 'like', "%$query%")
-                        ->orWhere('member_number', 'like', "%$query%");
+                    $sub->where('first_name', 'like', '%' . $query . '%')
+                        ->orWhere('last_name', 'like', '%' . $query . '%')
+                        ->orWhere('member_number', 'like', '%' . $query . '%');
                 });
             })
             ->orderByDesc('created_at')
             ->get()
             ->sortByDesc(fn($r) => $r->currentCheckin?->checked_in_at?->timestamp ?? 0);
-    
+
         $stats = [
             'checkedInToday'     => Checkin::whereDate('checked_in_at', today())->count(),
             'guestsToday'        => Checkin::whereDate('checked_in_at', today())
-                ->whereHas('registration', fn($q) => $q->where('member_type', 'guest'))
-                ->count(),
+                                        ->whereHas('registration', fn($q) => $q->where('member_type', 'guest'))
+                                        ->count(),
             'membersToday'       => Checkin::whereDate('checked_in_at', today())
-                ->whereHas('registration', fn($q) => $q->where('member_type', 'member'))
-                ->count(),
+                                        ->whereHas('registration', fn($q) => $q->where('member_type', 'member'))
+                                        ->count(),
             'totalRegistrations' => Registration::count(),
         ];
-    
+
         return view('staff.index', compact('registrations', 'query', 'stats'));
     }
 
-    public function checkin(Registration $registration)
+    public function checkin(Registration $registration): RedirectResponse
     {
         $registration->load('currentCheckin', 'member');
-    
+
+        // Bereits eingecheckt?
+        if ($registration->currentCheckin) {
+            return redirect()->route('staff')
+                ->with('error', $registration->first_name . ' ' . $registration->last_name . ' ist bereits eingecheckt.');
+        }
+
+        $visits = $registration->trial_visits_count ?? 0;
+
+        // ── HART GESPERRT ──────────────────────────────────────────────
         if ($registration->access_status === 'red') {
             return redirect()->route('staff')
-                ->with('error', 'Check-in verweigert – Kein Zutritt erlaubt.');
+                ->with('error', 'Check-in verweigert – ' . $registration->first_name . ' hat keinen Zutritt (Status: rot).');
         }
-    
-        if ($registration->currentCheckin) {
+
+        // Schnuppergast ab Besuch 4 (3 bereits absolviert) → gesperrt
+        if ($registration->member_type === 'guest' && $visits >= 3) {
             return redirect()->route('staff')
-                ->with('error', 'Diese Person ist bereits eingecheckt.');
+                ->with('error', 'Check-in verweigert – Schnupperlimit (3 Besuche) ausgeschöpft.');
         }
-    
-        // ✅ FIX: Kulanzgrund wurde mitgeschickt → Kulanz SOFORT setzen,
-        //         BEVOR die Schnuppergast-Sperre greift
+
+        // ── MODAL ERFORDERLICH ─────────────────────────────────────────
+        // Orange → modal-pflicht
+        // Schnuppergast ab Besuch 2 (visits >= 1) → modal-pflicht
+        $requiresModal = $registration->access_status === 'orange'
+                      || ($registration->member_type === 'guest' && $visits >= 1);
+
         $reason = strip_tags(request('reason', ''));
-        if ($reason) {
-            $registration->update([
-                'manual_exception_reason' => $reason,
-                'manual_exception_until'  => now()->endOfDay(),
-                'access_reason'           => 'Kulanz: ' . $reason,
-            ]);
-            // Relation neu laden damit isFuture() unten korrekt funktioniert
-            $registration->refresh();
+
+        if ($requiresModal && $reason === '') {
+            return redirect()->route('staff')
+                ->with('error', 'Check-in verweigert – Bestätigung mit Grund erforderlich.');
         }
-    
-        // Orange-Status protokollieren (für den orange-Modal-Flow)
-        if ($registration->access_status === 'orange' && $reason) {
-            $registration->update(['access_reason' => 'Orange-Checkin: ' . $reason]);
-            $registration->refresh();
-        }
-    
-        // Schnuppergast-Limit-Prüfung (greift jetzt NICHT mehr, wenn Kulanz gesetzt)
-        if ($registration->member_type === 'guest' && $registration->trial_visits_count >= 1) {
-            $hasActiveKulanz = $registration->manual_exception_until?->isFuture();
-            if (! $hasActiveKulanz) {
-                return redirect()->route('staff')
-                    ->with('error', 'Check-in verweigert – Schnuppergast hat den Erstbesuch bereits absolviert. Bitte Kulanz gewähren.');
-            }
-        }
-    
-        // Unverified Member: max. 3 Check-ins
-        $isUnverifiedMember = $registration->member_type === 'member' && $registration->member === null;
-    
+
+        // ── UNVERIFIED MEMBER: max. 3 Check-ins ───────────────────────
+        $isUnverifiedMember = $registration->member_type === 'member'
+                           && $registration->member === null;
+
         if ($isUnverifiedMember) {
             $totalCheckins = Checkin::where('registration_id', $registration->id)->count();
-    
             if ($totalCheckins >= 3) {
                 $registration->update([
                     'access_status' => 'red',
                     'access_reason' => 'Mitgliedsnummer nicht im System – Limit erreicht',
                 ]);
-    
-                return redirect()
-                    ->route('staff')
-                    ->with('error', 'Check-in verweigert – Mitgliedsnummer nicht im Mitgliedersystem. Limit von 3 Besuchen ausgeschöpft.');
+                return redirect()->route('staff')
+                    ->with('error', 'Check-in verweigert – Mitgliedsnummer nicht gefunden. Limit von 3 Besuchen ausgeschöpft.');
             }
         }
-    
+
+        // ── CHECK-IN DURCHFÜHREN ───────────────────────────────────────
+        if ($reason !== '') {
+            $registration->update([
+                'access_reason' => 'Manuelle Freigabe: ' . $reason,
+            ]);
+        }
+
         Checkin::create([
             'registration_id' => $registration->id,
             'checked_in_at'   => now(),
         ]);
-    
+
         $registration->increment('trial_visits_count');
-        
-        // Schnuppergast: access_reason mit Checkin-Zeitpunkt aktualisieren
-        if ($registration->member_type === 'guest') {
+        $registration->refresh();
+
+        // Nach Check-in: Status-Update Schnuppergast
+        if ($registration->member_type === 'guest' && $registration->trial_visits_count >= 3) {
             $registration->update([
-                'access_reason' => 'Schnupperklettern: Letzter Besuch am ' 
-                    . now()->format('d.m.Y \u\m H:i') . ' Uhr',
+                'access_status' => 'red',
+                'access_reason' => 'Schnupperlimit ausgeschöpft (3/3)',
+            ]);
+        } elseif ($registration->member_type === 'guest') {
+            $registration->update([
+                'access_reason' => 'Schnupperklettern: Letzter Besuch am ' . now()->format('d.m.Y \u\m H:i') . ' Uhr',
             ]);
         }
-    
-        // Nach Check-in prüfen ob Limit jetzt erreicht
+
+        // Unverified Member nach 3 Besuchen → rot
         if ($isUnverifiedMember) {
             $totalCheckins = Checkin::where('registration_id', $registration->id)->count();
-    
             if ($totalCheckins >= 3) {
                 $registration->update([
                     'access_status' => 'red',
@@ -7212,107 +7219,40 @@ class StaffController extends Controller
                 ]);
             }
         }
-    
-        return redirect()
-            ->route('staff')
-            ->with('success', $registration->first_name . ' ' . $registration->last_name . ' wurde erfolgreich eingecheckt.');
+
+        return redirect()->route('staff')
+            ->with('success', '✓ ' . $registration->first_name . ' ' . $registration->last_name . ' eingecheckt.');
     }
 
-    public function grantKulanz(Request $request, Registration $registration)
-    {
-        $request->validate([
-            'reason' => 'required|string|max:255',
-        ]);
-    
-        $reason = strip_tags($request->reason); // ← NEU
-    
-        $registration->update([
-            'manual_exception_reason' => $reason,
-            'manual_exception_until'  => now()->endOfDay(),
-            'access_status'           => 'orange',
-            'access_reason'           => 'Kulanz: ' . $reason,
-        ]);
-    
-        return redirect()
-            ->route('staff')
-            ->with('success', 'Kulanz gewährt für ' . e($registration->first_name) . '!');
-    }
-    
-        /**
-     * Kulanz erteilen UND sofort Check-in durchführen (für orange-Status).
-     */
-     
-    public function kulanzCheckin(Request $request, Registration $registration): RedirectResponse
-    {
-        $request->validate([
-            'reason' => 'required|string|max:255',
-        ]);
-    
-        $reason = strip_tags($request->reason);
-    
-        $registration->load('currentCheckin');
-        if ($registration->currentCheckin) {
-            return redirect()
-                ->route('staff')
-                ->with('error', e($registration->first_name) . ' ist bereits eingecheckt.');
-        }
-    
-        // 1. Kulanz erteilen
-        $registration->update([
-            'manual_exception_reason' => $reason,
-            'manual_exception_until'  => now()->endOfDay(),
-            'access_status'           => 'orange',
-            'access_reason'           => 'Kulanz: ' . $reason,
-        ]);
-    
-        // 2. Check-in sofort durchführen
-        Checkin::create([
-            'registration_id' => $registration->id,
-            'checked_in_at'   => now(),
-        ]);
-    
-        $registration->increment('trial_visits_count');
-    
-        return redirect()
-            ->route('staff')
-            ->with('success', '✓ Kulanz erteilt & ' . e($registration->first_name) . ' ' . e($registration->last_name) . ' eingecheckt.');
-    }
-    
     public function checkoutAll(): RedirectResponse
     {
         $now = now();
-    
         $openCheckins = Checkin::whereNull('checked_out_at')->get();
         $count = $openCheckins->count();
-    
+
         foreach ($openCheckins as $checkin) {
             $checkin->update(['checked_out_at' => $now]);
-    
-            $registration = Registration::find($checkin->registration_id);
+
+            $registration = Registration::with('member')->find($checkin->registration_id);
             if (!$registration) continue;
-    
+
             $registration->update(['checked_in_at' => null]);
-    
-            // Schnuppergast: nach 3 Besuchen → red
-            if ($registration->member_type === 'guest'
-                && $registration->trial_visits_count >= 3) {
+
+            if ($registration->member_type === 'guest' && $registration->trial_visits_count >= 3) {
                 $registration->update([
                     'access_status' => 'red',
                     'access_reason' => 'Schnupperlimit ausgeschöpft (3/3)',
                 ]);
-            // Schnuppergast: noch Besuche übrig → Timestamp des letzten Besuchs speichern
-            } elseif ($registration->member_type === 'guest'
-                && $registration->trial_visits_count >= 1) {
+            } elseif ($registration->member_type === 'guest' && $registration->trial_visits_count >= 1) {
                 $registration->update([
                     'access_reason' => 'Schnupperklettern: Letzter Besuch am '
                         . $checkin->checked_in_at->format('d.m.Y \u\m H:i') . ' Uhr',
                 ]);
             }
-    
-            // Unverified Member: nach 3 Besuchen → red
+
             $isUnverifiedMember = $registration->member_type === 'member'
-                                  && $registration->member === null;
-    
+                                && $registration->member === null;
+
             if ($isUnverifiedMember && $registration->trial_visits_count >= 3) {
                 $registration->update([
                     'access_status' => 'red',
@@ -7320,12 +7260,12 @@ class StaffController extends Controller
                 ]);
             }
         }
-    
+
         return redirect()->route('staff')
             ->with('success', '✓ ' . $count . ' ' . ($count === 1 ? 'Person' : 'Personen') . ' ausgecheckt.');
     }
 
-    public function confirmParentConsent(Registration $registration)
+    public function confirmParentConsent(Registration $registration): RedirectResponse
     {
         $registration->update([
             'parent_consent_received'    => true,
@@ -7333,22 +7273,23 @@ class StaffController extends Controller
             'needs_parent_consent'       => false,
         ]);
 
-        return redirect()
-            ->route('staff')
+        return redirect()->route('staff')
             ->with('success', 'Einverständniserklärung wurde bestätigt.');
+    }
+
+    public function importMembers(Request $request): RedirectResponse
+    {
+        return redirect()->route('staff')
+            ->with('error', 'Import bitte über den Admin-Bereich durchführen.');
     }
 
     private function parseCsvDate(?string $value): ?Carbon
     {
         $value = trim((string) $value);
-
-        if ($value === '') {
-            return null;
-        }
-
+        if ($value === '') return null;
         try {
             return Carbon::createFromFormat('d.m.Y', $value);
-        } catch (\Throwable $e) {
+        } catch (\Throwable) {
             return null;
         }
     }
@@ -7356,359 +7297,7 @@ class StaffController extends Controller
     private function nullIfEmpty(?string $value): ?string
     {
         $value = trim((string) $value);
-
         return $value === '' ? null : $value;
-    }
-}
-````
-
-## File: app/Http/Controllers/RegistrationController.php
-````php
-<?php
-
-namespace App\Http\Controllers;
-
-use App\Models\Member;
-use App\Models\Checkin;
-use App\Models\Registration;
-use Carbon\Carbon;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
-
-class RegistrationController extends Controller
-{
-    public function create(Request $request)
-    {
-        $request->session()->put('register_form_started_at', now()->timestamp);
-        return view('register');
-    }
-
-    public function store(Request $request)
-    {
-        // Honeypot-Spam-Schutz
-        if (filled($request->input('website')) || filled($request->input('fax_number'))) {
-            \Log::warning('Spam blockiert: Honeypot-Feld ausgefüllt', [
-                'ip' => $request->ip(),
-                'ua' => $request->userAgent(),
-            ]);
-            throw ValidationException::withMessages([
-                'first_name' => 'Die Registrierung konnte nicht verarbeitet werden. Bitte versuche es erneut.',
-            ]);
-        }
-
-        $formStartedAt = (int) $request->session()->get('register_form_started_at', 0);
-        $secondsTaken  = now()->timestamp - $formStartedAt;
-        if ($formStartedAt > 0 && $secondsTaken < 3) {
-            \Log::warning('Spam blockiert: Formular zu schnell abgesendet', [
-                'ip'           => $request->ip(),
-                'ua'           => $request->userAgent(),
-                'secondstaken' => $secondsTaken,
-            ]);
-            throw ValidationException::withMessages([
-                'first_name' => 'Die Registrierung konnte nicht verarbeitet werden. Bitte versuche es erneut.',
-            ]);
-        }
-
-        $validated = $request->validate([
-            'first_name'          => 'required|string|max:255',
-            'last_name'           => 'required|string|max:255',
-            'birth_date'          => 'required|date|after_or_equal:1900-01-01|before_or_equal:today',
-            'email'              => 'nullable|email|max:255',
-            'member_type'         => 'required|in:member,guest',
-            'member_number'       => [
-                'required_if:member_type,member',
-                'nullable',
-                'string',
-                // ✅ NEU: Format XX-XXXXX erzwingen
-                'regex:/^\d{2}-\d{5}$/',
-            ],
-            'waiver_accepted'     => 'required|accepted',
-            'rules_accepted'     => 'required|accepted',
-            'supervision_confirmed' => 'nullable|boolean',
-            // Honeypot-Felder
-            'hp_time'             => 'required|integer',
-            'website'            => 'nullable|max:0',
-            'fax_number'          => 'nullable|max:0',
-        ], [
-            'birth_date.required'   => 'Das Geburtsdatum ist erforderlich, um doppelte Registrierungen zu vermeiden.',
-            // ✅ NEU: Fehlermeldung für Format-Validierung
-            'member_number.regex'   => 'Die Mitgliedsnummer muss im Format XX-XXXXX eingegeben werden (z.B. 12-34567).',
-        ]);
-
-        // Freitextfelder bereinigen
-        $validated['first_name']    = strip_tags($validated['first_name']);
-        $validated['last_name']     = strip_tags($validated['last_name']);
-        $validated['member_number'] = isset($validated['member_number'])
-            ? strip_tags($validated['member_number'])
-            : null;
-
-        $birthDate       = Carbon::parse($validated['birth_date']);
-        $age             = $birthDate->age;
-        $needsSupervision   = $age < 14;
-        $needsParentConsent = $age >= 14 && $age < 18;
-
-        if ($needsSupervision && !$request->boolean('supervision_confirmed')) {
-            throw ValidationException::withMessages([
-                'supervision_confirmed' => 'Für Kinder unter 14 Jahren muss bestätigt werden, dass Klettern nur unter Aufsicht erfolgt.',
-            ]);
-        }
-
-        // Mitglieds-Verifikation gegen Mitgliederliste
-        $member = null;
-        if ($validated['member_type'] === 'member') {
-            $member = DB::table('members')
-                ->where('member_number', $validated['member_number'])
-                ->first();
-        
-            $lastNameInput = strtolower(trim($validated['last_name']));
-            $birthInput    = Carbon::parse($validated['birth_date'])->toDateString();
-        
-            if ($member) {
-                $lastNameDb = strtolower(trim($member->last_name ?? ''));
-                $birthDb    = $member->birth_date
-                    ? Carbon::parse($member->birth_date)->toDateString()
-                    : null;
-        
-                if ($lastNameInput !== $lastNameDb || $birthInput !== $birthDb) {
-                    throw ValidationException::withMessages([
-                        'member_number' => 'Die Mitgliedsnummer stimmt nicht mit den angegebenen Daten (Nachname + Geburtsdatum) überein. Bitte prüfen!',
-                    ]);
-                }
-            } else {
-                $nameBirthMatch = DB::table('members')
-                    ->whereRaw('LOWER(last_name) = ?', [$lastNameInput])
-                    ->whereDate('birth_date', $birthInput)
-                    ->exists();
-        
-                if ($nameBirthMatch) {
-                    throw ValidationException::withMessages([
-                        'member_number' => 'Die Mitgliedsnummer stimmt nicht mit den angegebenen Daten (Nachname + Geburtsdatum) überein. Bitte prüfen!',
-                    ]);
-                }
-            }
-        }
-
-        // Duplikat-Suche
-        $query = Registration::query();
-        if ($validated['member_type'] === 'member' && !empty($validated['member_number'])) {
-            $query->where('member_number', $validated['member_number']);
-        } else {
-            $query->whereRaw('LOWER(last_name) = ?', [strtolower(trim($validated['last_name']))])
-                  ->where('birth_date', $validated['birth_date']);
-        }
-        $existingReg = $query->first();
-
-        // FIX 1: Gast-Upgrade nach Name/Birthdate suchen, falls Mitglied kein Treffer
-        if (!$existingReg && $validated['member_type'] === 'member') {
-            $existingReg = Registration::whereRaw('LOWER(last_name) = ?', [strtolower(trim($validated['last_name']))])
-                ->where('birth_date', $validated['birth_date'])
-                ->where('member_type', 'guest')
-                ->first();
-        }
-
-        // Zugangsstatus bestimmen
-        $accessStatus = 'red';
-        $accessReason = 'Unbekannt';
-        $paymentStatus = 'paid';
-
-        if ($validated['member_type'] === 'guest') {
-            $validated['member_number'] = null;
-            if (!$existingReg) {
-                $accessStatus = 'blue';
-                $accessReason = 'Schnupperklettern';
-            } else {
-                $accessStatus = 'orange';
-                $accessReason = 'Kulanz: ' . $existingReg->manual_exception_reason;
-            }
-        } elseif ($validated['member_type'] === 'member') {
-            if (!$member) {
-                $accessStatus  = 'orange';
-                $accessReason  = 'Mitglied noch unbestätigt / nicht in Datenbank';
-                $paymentStatus = 'overdue';
-            } elseif (($member->membership_status ?? null) !== 'active') {
-                $accessStatus  = 'red';
-                $accessReason  = 'Mitgliedschaft inaktiv';
-                $paymentStatus = 'overdue';
-            } elseif (($member->payment_status ?? null) === 'overdue') {
-                $accessStatus  = 'orange';
-                $accessReason  = 'Beitrag offen';
-                $paymentStatus = 'overdue';
-            } else {
-                $accessStatus = 'green';
-                $accessReason = 'Mitgliedschaft aktiv & bezahlt';
-            }
-        }
-
-        // Aufsicht-Logik
-        if ($needsSupervision) {
-            if ($validated['member_type'] === 'guest') {
-                $accessReason .= ' · Unter 14 – Aufsicht erforderlich';
-            } else {
-                if ($request->boolean('supervision_confirmed')) {
-                    $accessStatus = 'green';
-                    $accessReason = 'Unter 14 – Aufsicht erforderlich';
-                } else {
-                    $accessStatus = 'orange';
-                    $accessReason = 'Unter 14 – Aufsicht erforderlich';
-                }
-            }
-        }
-
-        if ($needsParentConsent) {
-            if ($validated['member_type'] === 'guest') {
-                $accessReason .= ' · Jugendlicher (14–17)';
-            } else {
-                $accessStatus = 'green';
-                $accessReason = 'Jugendlicher (14–17)';
-            }
-        }
-
-        // GAST-BLOCK / Upgrade-Logik
-        if ($existingReg) {
-            // FIX 2: Upgrade-Logik Gast → Mitglied erlauben
-            $isUpgrade = $existingReg->member_type === 'guest' && $validated['member_type'] === 'member';
-
-            if (!$isUpgrade) {
-                if ($existingReg->member_type === 'guest') {
-                    if (($existingReg->trial_visits_count ?? 0) >= 2) {
-                        throw ValidationException::withMessages([
-                            'first_name' => 'Du hast das Schnupper-Limit bereits vollständig ausgeschöpft. Eine weitere Registrierung als Gast ist nicht möglich.',
-                        ]);
-                    }
-                    $hasKulanz = $existingReg->manual_exception_until &&
-                                 $existingReg->manual_exception_until->isFuture();
-                    if (!$hasKulanz) {
-                        throw ValidationException::withMessages([
-                            'first_name' => 'Du bist bereits als Schnuppergast registriert. Ein zweites Mal ist nur nach Absprache mit dem Hallendienst möglich.',
-                        ]);
-                    }
-                } else {
-                    return redirect('verify/' . $existingReg->qr_token)
-                        ->with('success', 'Du warst bereits registriert! Hier ist dein aktueller Status.');
-                }
-            }
-
-            // FIX 3: member_type & member_number mitschreiben
-            $existingReg->update([
-                'member_type'              => $validated['member_type'],
-                'member_number'            => $validated['member_number'] ?? null,
-                'waiver_accepted'          => true,
-                'birth_date'               => $validated['birth_date'],
-                'email'                   => $validated['email'] ?? null,
-                'access_status'            => $accessStatus,
-                'access_reason'            => $accessReason,
-                'payment_status'            => $paymentStatus,
-                'needs_supervision'        => $needsSupervision,
-                'needs_parent_consent'      => $needsParentConsent,
-                'parent_consent_received'   => $needsParentConsent ? $existingReg->parent_consent_received : false,
-                'parent_consent_received_at' => $needsParentConsent ? $existingReg->parent_consent_received_at : null,
-                'supervision_confirmed'    => $needsSupervision
-                    ? $request->boolean('supervision_confirmed')
-                    : false,
-            ]);
-            $registration = $existingReg;
-        } else {
-            $registration = Registration::create([
-                'first_name'               => $validated['first_name'],
-                'last_name'                => $validated['last_name'],
-                'birth_date'               => $validated['birth_date'],
-                'email'                   => $validated['email'] ?? null,
-                'member_type'              => $validated['member_type'],
-                'member_number'            => $validated['member_number'] ?? null,
-                'waiver_accepted'          => true,
-                'waiver_version'           => 'v1',
-                'payment_status'           => $paymentStatus,
-                'access_status'            => $accessStatus,
-                'access_reason'            => $accessReason,
-                'trial_visits_count'        => 0,
-                'needs_supervision'        => $needsSupervision,
-                'needs_parent_consent'      => $needsParentConsent,
-                'parent_consent_received'   => false,
-                'parent_consent_received_at' => null,
-                'supervision_confirmed'    => $needsSupervision
-                    ? $request->boolean('supervision_confirmed')
-                    : false,
-                'qr_token'                 => (string) Str::uuid(),
-            ]);
-        }
-
-        return redirect('verify/' . $registration->qr_token)
-            ->with('success', 'Registrierung erfolgreich!');
-    }
-
-    public function verify(string $token)
-    {
-        $registration = Registration::with('currentCheckin')
-            ->where('qr_token', $token)
-            ->firstOrFail();
-
-        return view('verify', compact('registration'));
-    }
-
-    public function checkin(Request $request, string $token)
-    {
-        $registration = Registration::with('currentCheckin')
-            ->where('qr_token', $token)
-            ->first();
-
-        if (!$registration) {
-            $msg = 'QR-Code ungültig oder abgelaufen.';
-            return $request->expectsJson()
-                ? response()->json(['success' => false, 'message' => $msg], 404)
-                : abort(404, $msg);
-        }
-
-        $hasActiveKulanz = $registration->manual_exception_until &&
-                           $registration->manual_exception_until->isFuture();
-        $needsKulanz = in_array($registration->access_status, ['red', 'orange']) && !$hasActiveKulanz;
-
-        if ($needsKulanz) {
-            $statusText = strtoupper($registration->access_status);
-            $message    = "Check-in blockiert! Status ist {$statusText}. Kulanz erforderlich: "
-                        . ($registration->access_reason ?? 'Unbekannt') . '.';
-            if ($request->expectsJson()) {
-                return response()->json(['success' => false, 'message' => $message], 403);
-            }
-            return redirect()->route('verify', $registration->qr_token)->withErrors($message);
-        }
-
-        if ($registration->currentCheckin) {
-            $message = $registration->first_name . ' ' . $registration->last_name
-                . ' ist bereits seit '
-                . $registration->currentCheckin->checked_in_at->format('H:i')
-                . ' Uhr eingecheckt.';
-            if ($request->expectsJson()) {
-                return response()->json(['success' => false, 'message' => $message], 422);
-            }
-            return redirect()->route('verify', $registration->qr_token)->withErrors($message);
-        }
-
-        // Nur green/blue dürfen direkt einchecken
-        if (!in_array($registration->access_status, ['green', 'blue'])) {
-            $message = $registration->access_status === 'red'
-                ? 'Kein Zutritt erlaubt.'
-                : 'Zutritt erfordert manuelle Freigabe durch den Hallendienst.';
-            if ($request->expectsJson()) {
-                return response()->json(['success' => false, 'message' => $message], 403);
-            }
-            return redirect()->back()->withErrors('Check-in verweigert: ' . $message);
-        }
-
-        Checkin::create([
-            'registration_id' => $registration->id,
-            'checked_in_at'     => now(),
-        ]);
-        $registration->increment('trial_visits_count');
-
-        $message = $registration->first_name . ' ' . $registration->last_name
-                 . ' wurde erfolgreich eingecheckt.';
-
-        if ($request->expectsJson()) {
-            return response()->json(['success' => true, 'message' => $message]);
-        }
-        return redirect()->route('verify', $registration->qr_token)->with('success', $message);
     }
 }
 ````
@@ -8202,6 +7791,362 @@ class RegistrationController extends Controller
     </script>
 </body>
 </html>
+````
+
+## File: app/Http/Controllers/RegistrationController.php
+````php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Member;
+use App\Models\Checkin;
+use App\Models\Registration;
+use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
+
+class RegistrationController extends Controller
+{
+    public function create(Request $request)
+    {
+        $request->session()->put('register_form_started_at', now()->timestamp);
+        return view('register');
+    }
+
+    public function store(Request $request)
+    {
+        // Honeypot-Spam-Schutz
+        if (filled($request->input('website')) || filled($request->input('fax_number'))) {
+            \Log::warning('Spam blockiert: Honeypot-Feld ausgefüllt', [
+                'ip' => $request->ip(),
+                'ua' => $request->userAgent(),
+            ]);
+            throw ValidationException::withMessages([
+                'first_name' => 'Die Registrierung konnte nicht verarbeitet werden. Bitte versuche es erneut.',
+            ]);
+        }
+
+        $formStartedAt = (int) $request->session()->get('register_form_started_at', 0);
+        $secondsTaken  = now()->timestamp - $formStartedAt;
+        if ($formStartedAt > 0 && $secondsTaken < 3) {
+            \Log::warning('Spam blockiert: Formular zu schnell abgesendet', [
+                'ip'           => $request->ip(),
+                'ua'           => $request->userAgent(),
+                'secondstaken' => $secondsTaken,
+            ]);
+            throw ValidationException::withMessages([
+                'first_name' => 'Die Registrierung konnte nicht verarbeitet werden. Bitte versuche es erneut.',
+            ]);
+        }
+
+        $validated = $request->validate([
+            'first_name'            => 'required|string|max:255',
+            'last_name'             => 'required|string|max:255',
+            'birth_date'            => 'required|date|after_or_equal:1900-01-01|before_or_equal:today',
+            'email'                 => 'nullable|email|max:255',
+            'member_type'           => 'required|in:member,guest',
+            'member_number'         => [
+                'required_if:member_type,member',
+                'nullable',
+                'string',
+                'regex:/^\d{2}-\d{5}$/',
+            ],
+            'waiver_accepted'       => 'required|accepted',
+            'rules_accepted'        => 'required|accepted',
+            'supervision_confirmed' => 'nullable|boolean',
+            'hp_time'               => 'required|integer',
+            'website'               => 'nullable|max:0',
+            'fax_number'            => 'nullable|max:0',
+        ], [
+            'birth_date.required'  => 'Das Geburtsdatum ist erforderlich, um doppelte Registrierungen zu vermeiden.',
+            'member_number.regex'  => 'Die Mitgliedsnummer muss im Format XX-XXXXX eingegeben werden (z.B. 12-34567).',
+        ]);
+
+        // Freitextfelder bereinigen
+        $validated['first_name']    = strip_tags($validated['first_name']);
+        $validated['last_name']     = strip_tags($validated['last_name']);
+        $validated['member_number'] = isset($validated['member_number'])
+            ? strip_tags($validated['member_number'])
+            : null;
+
+        $birthDate          = Carbon::parse($validated['birth_date']);
+        $age                = $birthDate->age;
+        $needsSupervision   = $age < 14;
+        $needsParentConsent = $age >= 14 && $age < 18;
+
+        if ($needsSupervision && !$request->boolean('supervision_confirmed')) {
+            throw ValidationException::withMessages([
+                'supervision_confirmed' => 'Für Kinder unter 14 Jahren muss bestätigt werden, dass Klettern nur unter Aufsicht erfolgt.',
+            ]);
+        }
+
+        // Mitglieds-Verifikation gegen Mitgliederliste
+        $member = null;
+        if ($validated['member_type'] === 'member') {
+            $member = DB::table('members')
+                ->where('member_number', $validated['member_number'])
+                ->first();
+
+            $lastNameInput = strtolower(trim($validated['last_name']));
+            $birthInput    = Carbon::parse($validated['birth_date'])->toDateString();
+
+            if ($member) {
+                $lastNameDb = strtolower(trim($member->last_name ?? ''));
+                $birthDb    = $member->birth_date
+                    ? Carbon::parse($member->birth_date)->toDateString()
+                    : null;
+
+                if ($lastNameInput !== $lastNameDb || $birthInput !== $birthDb) {
+                    throw ValidationException::withMessages([
+                        'member_number' => 'Die Mitgliedsnummer stimmt nicht mit den angegebenen Daten (Nachname + Geburtsdatum) überein. Bitte prüfen!',
+                    ]);
+                }
+            } else {
+                $nameBirthMatch = DB::table('members')
+                    ->whereRaw('LOWER(last_name) = ?', [$lastNameInput])
+                    ->whereDate('birth_date', $birthInput)
+                    ->exists();
+
+                if ($nameBirthMatch) {
+                    throw ValidationException::withMessages([
+                        'member_number' => 'Die Mitgliedsnummer stimmt nicht mit den angegebenen Daten (Nachname + Geburtsdatum) überein. Bitte prüfen!',
+                    ]);
+                }
+            }
+        }
+
+        // Duplikat-Suche
+        $query = Registration::query();
+        if ($validated['member_type'] === 'member' && !empty($validated['member_number'])) {
+            $query->where('member_number', $validated['member_number']);
+        } else {
+            $query->whereRaw('LOWER(last_name) = ?', [strtolower(trim($validated['last_name']))])
+                  ->where('birth_date', $validated['birth_date']);
+        }
+        $existingReg = $query->first();
+
+        // Gast-Upgrade nach Name/Birthdate suchen, falls Mitglied kein Treffer
+        if (!$existingReg && $validated['member_type'] === 'member') {
+            $existingReg = Registration::whereRaw('LOWER(last_name) = ?', [strtolower(trim($validated['last_name']))])
+                ->where('birth_date', $validated['birth_date'])
+                ->where('member_type', 'guest')
+                ->first();
+        }
+
+        // ── Zugangsstatus bestimmen ────────────────────────────────────
+        $accessStatus  = 'red';
+        $accessReason  = null;
+        $paymentStatus = 'paid';
+
+        if ($validated['member_type'] === 'guest') {
+            $validated['member_number'] = null;
+            $existingVisits = $existingReg?->trial_visits_count ?? 0;
+
+            if ($existingVisits >= 3) {
+                // Sollte durch die Sperre weiter unten eigentlich nicht erreicht werden,
+                // aber als Absicherung:
+                $accessStatus = 'red';
+                $accessReason = 'Schnupperlimit ausgeschöpft (3/3)';
+            } elseif ($existingVisits >= 1) {
+                // Bereits mindestens 1 Besuch → kommt ins Modal beim nächsten Check-in
+                $accessStatus = 'blue';
+                $accessReason = 'Schnupperklettern: Besuch ' . ($existingVisits + 1) . ' von 3';
+            } else {
+                // Erstregistrierung
+                $accessStatus = 'blue';
+                $accessReason = null;
+            }
+
+        } elseif ($validated['member_type'] === 'member') {
+            if (!$member) {
+                $accessStatus  = 'orange';
+                $accessReason  = 'Mitglied noch unbestätigt / nicht in Datenbank';
+                $paymentStatus = 'overdue';
+            } elseif (($member->membership_status ?? null) !== 'active') {
+                $accessStatus  = 'red';
+                $accessReason  = 'Mitgliedschaft inaktiv';
+                $paymentStatus = 'overdue';
+            } elseif (($member->payment_status ?? null) === 'overdue') {
+                $accessStatus  = 'orange';
+                $accessReason  = 'Beitrag offen';
+                $paymentStatus = 'overdue';
+            } else {
+                $accessStatus = 'green';
+                $accessReason = null;
+            }
+        }
+
+        // Aufsicht-Logik (ergänzt den bestehenden Reason)
+        if ($needsSupervision) {
+            $supervisionNote = 'Unter 14 – Aufsicht erforderlich';
+            if ($accessReason) {
+                $accessReason .= ' · ' . $supervisionNote;
+            } else {
+                $accessReason = $supervisionNote;
+            }
+            if ($validated['member_type'] === 'member') {
+                $accessStatus = $request->boolean('supervision_confirmed') ? 'green' : 'orange';
+            }
+        }
+
+        if ($needsParentConsent) {
+            $consentNote = 'Jugendlicher (14–17)';
+            if ($accessReason) {
+                $accessReason .= ' · ' . $consentNote;
+            } else {
+                $accessReason = $consentNote;
+            }
+            if ($validated['member_type'] === 'member') {
+                $accessStatus = 'green';
+            }
+        }
+
+        // ── GAST-BLOCK / Upgrade-Logik ────────────────────────────────
+        if ($existingReg) {
+            $isUpgrade = $existingReg->member_type === 'guest' && $validated['member_type'] === 'member';
+
+            if (!$isUpgrade) {
+                if ($existingReg->member_type === 'guest') {
+                    if (($existingReg->trial_visits_count ?? 0) >= 3) {
+                        throw ValidationException::withMessages([
+                            'first_name' => 'Du hast das Schnupper-Limit bereits vollständig ausgeschöpft. Eine weitere Registrierung als Gast ist nicht möglich.',
+                        ]);
+                    }
+                    // Bereits registriert, aber noch Besuche übrig → nur erlaubt mit Staff-Freigabe
+                    if (($existingReg->trial_visits_count ?? 0) >= 1) {
+                        throw ValidationException::withMessages([
+                            'first_name' => 'Du bist bereits als Schnuppergast registriert. Ein zweites Mal ist nur nach Absprache mit dem Hallendienst möglich.',
+                        ]);
+                    }
+                } else {
+                    return redirect('verify/' . $existingReg->qr_token)
+                        ->with('success', 'Du warst bereits registriert! Hier ist dein aktueller Status.');
+                }
+            }
+
+            $existingReg->update([
+                'member_type'                => $validated['member_type'],
+                'member_number'              => $validated['member_number'] ?? null,
+                'waiver_accepted'            => true,
+                'birth_date'                 => $validated['birth_date'],
+                'email'                      => $validated['email'] ?? null,
+                'access_status'              => $accessStatus,
+                'access_reason'              => $accessReason,
+                'payment_status'             => $paymentStatus,
+                'needs_supervision'          => $needsSupervision,
+                'needs_parent_consent'       => $needsParentConsent,
+                'parent_consent_received'    => $needsParentConsent ? $existingReg->parent_consent_received : false,
+                'parent_consent_received_at' => $needsParentConsent ? $existingReg->parent_consent_received_at : null,
+                'supervision_confirmed'      => $needsSupervision
+                    ? $request->boolean('supervision_confirmed')
+                    : false,
+            ]);
+            $registration = $existingReg;
+        } else {
+            $registration = Registration::create([
+                'first_name'                 => $validated['first_name'],
+                'last_name'                  => $validated['last_name'],
+                'birth_date'                 => $validated['birth_date'],
+                'email'                      => $validated['email'] ?? null,
+                'member_type'                => $validated['member_type'],
+                'member_number'              => $validated['member_number'] ?? null,
+                'waiver_accepted'            => true,
+                'waiver_version'             => 'v1',
+                'payment_status'             => $paymentStatus,
+                'access_status'              => $accessStatus,
+                'access_reason'              => $accessReason,
+                'trial_visits_count'         => 0,
+                'needs_supervision'          => $needsSupervision,
+                'needs_parent_consent'       => $needsParentConsent,
+                'parent_consent_received'    => false,
+                'parent_consent_received_at' => null,
+                'supervision_confirmed'      => $needsSupervision
+                    ? $request->boolean('supervision_confirmed')
+                    : false,
+                'qr_token'                   => (string) Str::uuid(),
+            ]);
+        }
+
+        return redirect('verify/' . $registration->qr_token)
+            ->with('success', 'Registrierung erfolgreich!');
+    }
+
+    public function verify(string $token)
+    {
+        $registration = Registration::with('currentCheckin')
+            ->where('qr_token', $token)
+            ->firstOrFail();
+
+        return view('verify', compact('registration'));
+    }
+
+    public function checkin(Request $request, string $token)
+    {
+        $registration = Registration::with('currentCheckin')
+            ->where('qr_token', $token)
+            ->first();
+
+        if (!$registration) {
+            $msg = 'QR-Code ungültig oder abgelaufen.';
+            return $request->expectsJson()
+                ? response()->json(['success' => false, 'message' => $msg], 404)
+                : abort(404, $msg);
+        }
+
+        $hasActiveKulanz = $registration->manual_exception_until &&
+                           $registration->manual_exception_until->isFuture();
+        $needsKulanz = in_array($registration->access_status, ['red', 'orange']) && !$hasActiveKulanz;
+
+        if ($needsKulanz) {
+            $statusText = strtoupper($registration->access_status);
+            $message    = "Check-in blockiert! Status ist {$statusText}. Kulanz erforderlich: "
+                        . ($registration->access_reason ?? 'Unbekannt') . '.';
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 403);
+            }
+            return redirect()->route('verify', $registration->qr_token)->withErrors($message);
+        }
+
+        if ($registration->currentCheckin) {
+            $message = $registration->first_name . ' ' . $registration->last_name
+                . ' ist bereits seit '
+                . $registration->currentCheckin->checked_in_at->format('H:i')
+                . ' Uhr eingecheckt.';
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 422);
+            }
+            return redirect()->route('verify', $registration->qr_token)->withErrors($message);
+        }
+
+        // Nur green/blue dürfen direkt einchecken
+        if (!in_array($registration->access_status, ['green', 'blue'])) {
+            $message = $registration->access_status === 'red'
+                ? 'Kein Zutritt erlaubt.'
+                : 'Zutritt erfordert manuelle Freigabe durch den Hallendienst.';
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 403);
+            }
+            return redirect()->back()->withErrors('Check-in verweigert: ' . $message);
+        }
+
+        Checkin::create([
+            'registration_id' => $registration->id,
+            'checked_in_at'   => now(),
+        ]);
+        $registration->increment('trial_visits_count');
+
+        $message = $registration->first_name . ' ' . $registration->last_name
+                 . ' wurde erfolgreich eingecheckt.';
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => $message]);
+        }
+        return redirect()->route('verify', $registration->qr_token)->with('success', $message);
+    }
+}
 ````
 
 ## File: app/Http/Controllers/AdminController.php
@@ -8883,48 +8828,27 @@ class AdminController extends Controller
 
                 @forelse ($registrations as $registration)
                     @php
-                        $currentCheckin  = $registration->currentCheckin;
-                        $hasActiveKulanz = $registration->manual_exception_until
-                                           && $registration->manual_exception_until->isFuture();
-                        $visits          = $registration->trial_visits_count ?? 0;
-
+                        $currentCheckin = $registration->currentCheckin;
+                        $visits         = $registration->trial_visits_count ?? 0;
+                        $lastCheckin    = $registration->checkins()->latest('checked_in_at')->first();
+                    
                         $isTrialMaxReached         = $registration->member_type === 'guest' && $visits >= 3;
                         $isUnverifiedMemberBlocked = $registration->member_type === 'member'
-                                                     && $registration->member === null
-                                                     && $registration->access_status === 'red';
-                        $isTrialLimitReached       = $registration->member_type === 'guest'
-                                                     && $visits >= 1 && $visits < 3
-                                                     && !$hasActiveKulanz;
-
-                        $isHardBlocked   = $isTrialMaxReached
-                                        || $isUnverifiedMemberBlocked
-                                        || $registration->access_status === 'red';
-
-                        $isNeedsModal   = ($registration->access_status === 'orange'
-                                        && !$hasActiveKulanz)
-                                        || $isTrialLimitReached;
-
-                        $kulanzHint = match(true) {
-                            $registration->access_status === 'red' => 'Person gesperrt',
-                            $isTrialLimitReached => $registration->access_reason 
-                                ?? ('Schnupperlimit erreicht (' . $visits . ')'),
-                            default => 'Aktion erforderlich',
-                        };
-                        $hintIcon  = $registration->access_status === 'red' ? '🚫' : '⚠️';
-                        $hintColor = $registration->access_status === 'red' ? 'text-red-600' : 'text-amber-600';
-
-                        $accessStyle = match ($registration->access_status) {
-                            'green'  => 'bg-green-100 text-green-800',
-                            'blue'   => 'bg-blue-100 text-blue-800',
-                            'orange' => 'bg-amber-100 text-amber-800',
-                            default  => 'bg-red-100 text-red-800',
-                        };
-                        $accessText = match ($registration->access_status) {
-                            'green'  => 'Zutritt ok',
-                            'blue'   => 'Schnuppern',
-                            'orange' => $registration->manual_exception_reason ? 'Kulanz' : 'Warnung',
-                            default  => 'Gesperrt',
-                        };
+                                                   && $registration->member === null
+                                                   && $registration->access_status === 'red';
+                    
+                        // Hart gesperrt = keine Aktion möglich
+                        $isHardBlocked = $registration->access_status === 'red'
+                                      || $isTrialMaxReached
+                                      || $isUnverifiedMemberBlocked;
+                    
+                        // Modal nötig = orange ODER Schnuppergast Besuch 2–3
+                        $isTrialNeedsModal = $registration->member_type === 'guest' && $visits >= 1 && $visits < 3;
+                        $requiresModal     = !$isHardBlocked
+                                          && ($registration->access_status === 'orange' || $isTrialNeedsModal);
+                    
+                        // Warnung im Modal: nächster Check-in sperrt
+                        $nextCheckinTriggersRed = $registration->member_type === 'guest' && $visits === 2;
                     @endphp
 
                     @if (!$shownDividerMobile && !$currentCheckin)
@@ -8994,46 +8918,46 @@ class AdminController extends Controller
                         {{-- ── Aktion (Mobile) ──────────────────────────────── --}}
                         <div class="border-t border-gray-100 pt-3">
                             @if ($currentCheckin)
-                                <span class="text-sm text-gray-500">
-                                    Eingecheckt {{ $currentCheckin->checked_in_at->format('H:i') }} Uhr
-                                </span>
+                                <span>Eingecheckt {{ $currentCheckin->checked_in_at->format('H:i') }} Uhr</span>
+                            
                             @elseif ($isHardBlocked)
-                                <button type="button" disabled
-                                    class="w-full inline-flex items-center justify-center border border-gray-200
-                                           bg-gray-100 text-gray-400 rounded-lg px-3 py-2 text-sm font-semibold
-                                           cursor-not-allowed min-h-[44px]">
-                                    Check-in
-                                </button>
-                            @elseif ($isNeedsModal)
-                                {{-- Orange ohne aktive Kulanz → Modal --}}
-                                <form id="checkin-form-mob-{{ $registration->id }}"
-                                      method="POST"
-                                      action="{{ route('staff.checkin', $registration) }}"
-                                      class="hidden">
+                                <button disabled class="w-full inline-flex items-center justify-center border border-gray-200
+                                                       bg-gray-100 text-gray-400 rounded-lg px-3 py-2 text-sm font-semibold
+                                                       cursor-not-allowed min-h-[44px]">
+                                   Check-in
+                               </button>
+                            
+                            @elseif ($requiresModal)
+                                {{-- Verstecktes Formular --}}
+                                <form id="checkin-form-{{ $registration->id }}" method="POST"
+                                      action="{{ route('staff.checkin', $registration) }}" class="hidden">
                                     @csrf
-                                    <input type="text" name="reason" id="reason-mob-{{ $registration->id }}">
+                                    <input type="text" name="reason" id="reason-{{ $registration->id }}">
                                 </form>
                                 <button type="button"
-                                    onclick="openOrangeCheckin(
-                                        document.getElementById('checkin-form-mob-{{ $registration->id }}'),
-                                        document.getElementById('reason-mob-{{ $registration->id }}'),
+                                    onclick="openCheckinModal(
+                                        document.getElementById('checkin-form-{{ $registration->id }}'),
+                                        document.getElementById('reason-{{ $registration->id }}'),
                                         '{{ e($registration->first_name . ' ' . $registration->last_name) }}',
-                                        '{{ e($registration->access_reason ?? 'Kein Grund angegeben') }}',
-                                        {{ $isTrialLimitReached ? 'true' : 'false' }}
+                                        '{{ e($registration->access_reason ?? '') }}',
+                                        '{{ $registration->access_status }}',
+                                        {{ $nextCheckinTriggersRed ? 'true' : 'false' }},
+                                        {{ $visits }},
+                                        '{{ $lastCheckin ? $lastCheckin->checked_in_at->format('d.m.Y H:i') : '' }}'
                                     )"
                                     class="w-full inline-flex items-center justify-center border border-transparent
                                            bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold
                                            hover:bg-indigo-700 transition min-h-[44px] touch-manipulation">
                                     Check-in
                                 </button>
+                            
                             @else
                                 <form method="POST" action="{{ route('staff.checkin', $registration) }}">
                                     @csrf
-                                    <button type="submit"
-                                        class="w-full inline-flex items-center justify-center border border-transparent
-                                               bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold
-                                               hover:bg-indigo-700 transition min-h-[44px] touch-manipulation">
-                                        Check-in
+                                    <button type="submit" class="w-full inline-flex items-center justify-center border border-transparent
+                            	                                   bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold
+                            	                                   hover:bg-indigo-700 transition min-h-[44px] touch-manipulation">
+                                       Check-in
                                     </button>
                                 </form>
                             @endif
@@ -9068,48 +8992,27 @@ class AdminController extends Controller
 
                             @forelse ($registrations as $registration)
                                 @php
-                                    $currentCheckin  = $registration->currentCheckin;
-                                    $hasActiveKulanz = $registration->manual_exception_until
-                                                       && $registration->manual_exception_until->isFuture();
-                                    $visits          = $registration->trial_visits_count ?? 0;
-
+                                    $currentCheckin = $registration->currentCheckin;
+                                    $visits         = $registration->trial_visits_count ?? 0;
+                                    $lastCheckin    = $registration->checkins()->latest('checked_in_at')->first();
+                                
                                     $isTrialMaxReached         = $registration->member_type === 'guest' && $visits >= 3;
                                     $isUnverifiedMemberBlocked = $registration->member_type === 'member'
-                                                                 && $registration->member === null
-                                                                 && $registration->access_status === 'red';
-                                    $isTrialLimitReached       = $registration->member_type === 'guest'
-                                                                 && $visits >= 1 && $visits < 3
-                                                                 && !$hasActiveKulanz;
-
-                                    $isHardBlocked   = $isTrialMaxReached
-                                                    || $isUnverifiedMemberBlocked
-                                                    || $registration->access_status === 'red';
-
-                                    $isNeedsModal   = ($registration->access_status === 'orange'
-                                                    && !$hasActiveKulanz)
-                                        || $isTrialLimitReached;
-
-                                    $kulanzHint = match(true) {
-                                        $registration->access_status === 'red' => 'Person gesperrt',
-                                        $isTrialLimitReached => $registration->access_reason 
-                                            ?? ('Schnupperlimit erreicht (' . $visits . ')'),
-                                        default => 'Aktion erforderlich',
-                                    };
-                                    $hintIcon  = $registration->access_status === 'red' ? '🚫' : '⚠️';
-                                    $hintColor = $registration->access_status === 'red' ? 'text-red-600' : 'text-amber-600';
-
-                                    $accessStyle = match ($registration->access_status) {
-                                        'green'  => 'bg-green-100 text-green-800',
-                                        'blue'   => 'bg-blue-100 text-blue-800',
-                                        'orange' => 'bg-amber-100 text-amber-800',
-                                        default  => 'bg-red-100 text-red-800',
-                                    };
-                                    $accessText = match ($registration->access_status) {
-                                        'green'  => 'Zutritt ok',
-                                        'blue'   => 'Schnuppergast',
-                                        'orange' => $registration->manual_exception_reason ? 'Kulanz' : 'Warnung',
-                                        default  => 'Gesperrt',
-                                    };
+                                                               && $registration->member === null
+                                                               && $registration->access_status === 'red';
+                                
+                                    // Hart gesperrt = keine Aktion möglich
+                                    $isHardBlocked = $registration->access_status === 'red'
+                                                  || $isTrialMaxReached
+                                                  || $isUnverifiedMemberBlocked;
+                                
+                                    // Modal nötig = orange ODER Schnuppergast Besuch 2–3
+                                    $isTrialNeedsModal = $registration->member_type === 'guest' && $visits >= 1 && $visits < 3;
+                                    $requiresModal     = !$isHardBlocked
+                                                      && ($registration->access_status === 'orange' || $isTrialNeedsModal);
+                                
+                                    // Warnung im Modal: nächster Check-in sperrt
+                                    $nextCheckinTriggersRed = $registration->member_type === 'guest' && $visits === 2;
                                 @endphp
 
                                 @if (!$shownDivider && !$currentCheckin)
@@ -9185,51 +9088,50 @@ class AdminController extends Controller
                                     {{-- ── CHECK-IN AKTION (Desktop) ──────────────── --}}
                                     <td class="px-4 py-4 align-top">
                                         @if ($currentCheckin)
-                                            <span class="text-sm text-gray-500">
-                                                Eingecheckt {{ $currentCheckin->checked_in_at->format('H:i') }} Uhr
-                                            </span>
+                                            <span>Eingecheckt {{ $currentCheckin->checked_in_at->format('H:i') }} Uhr</span>
+                                        
                                         @elseif ($isHardBlocked)
-                                            <button type="button" disabled
-                                                class="inline-flex items-center justify-center border border-gray-200
-                                                       bg-gray-100 text-gray-400 rounded-lg px-3 py-2 text-sm font-semibold
-                                                       cursor-not-allowed">
-                                                Check-in
-                                            </button>
-                                        @elseif ($isNeedsModal)
-                                            {{-- Orange ohne aktive Kulanz → Modal --}}
-                                            <form id="checkin-form-{{ $registration->id }}"
-                                                  method="POST"
-                                                  action="{{ route('staff.checkin', $registration) }}"
-                                                  class="hidden">
+                                            <button disabled class="w-full inline-flex items-center justify-center border border-gray-200
+                                                                   bg-gray-100 text-gray-400 rounded-lg px-3 py-2 text-sm font-semibold
+                                                                   cursor-not-allowed min-h-[44px]">
+                                               Check-in
+                                           </button>
+                                        
+                                        @elseif ($requiresModal)
+                                            {{-- Verstecktes Formular --}}
+                                            <form id="checkin-form-{{ $registration->id }}" method="POST"
+                                                  action="{{ route('staff.checkin', $registration) }}" class="hidden">
                                                 @csrf
                                                 <input type="text" name="reason" id="reason-{{ $registration->id }}">
                                             </form>
                                             <button type="button"
-                                                onclick="openOrangeCheckin(
+                                                onclick="openCheckinModal(
                                                     document.getElementById('checkin-form-{{ $registration->id }}'),
                                                     document.getElementById('reason-{{ $registration->id }}'),
                                                     '{{ e($registration->first_name . ' ' . $registration->last_name) }}',
-                                                    '{{ e($registration->access_reason ?? 'Kein Grund angegeben') }}',
-                                                    {{ $isTrialLimitReached ? 'true' : 'false' }}
+                                                    '{{ e($registration->access_reason ?? '') }}',
+                                                    '{{ $registration->access_status }}',
+                                                    {{ $nextCheckinTriggersRed ? 'true' : 'false' }},
+                                                    {{ $visits }},
+                                                    '{{ $lastCheckin ? $lastCheckin->checked_in_at->format('d.m.Y H:i') : '' }}'
                                                 )"
-                                                class="inline-flex items-center justify-center border border-transparent
+                                                class="w-full inline-flex items-center justify-center border border-transparent
                                                        bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold
-                                                       hover:bg-indigo-700 transition">
+                                                       hover:bg-indigo-700 transition min-h-[44px] touch-manipulation">
                                                 Check-in
                                             </button>
+                                        
                                         @else
                                             <form method="POST" action="{{ route('staff.checkin', $registration) }}">
                                                 @csrf
-                                                <button type="submit"
-                                                    class="inline-flex items-center justify-center border border-transparent
-                                                           bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold
-                                                           hover:bg-indigo-700 transition">
-                                                    Check-in
+                                                <button type="submit" class="w-full inline-flex items-center justify-center border border-transparent
+                                        	                                   bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold
+                                        	                                   hover:bg-indigo-700 transition min-h-[44px] touch-manipulation">
+                                                   Check-in
                                                 </button>
                                             </form>
                                         @endif
                                     </td>
-
                                 </tr>
                             @empty
                                 <tr>

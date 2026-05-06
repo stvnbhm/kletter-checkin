@@ -197,6 +197,19 @@
                     
                         // Warnung im Modal: nächster Check-in sperrt
                         $nextCheckinTriggersRed = $registration->member_type === 'guest' && $visits === 2;
+                        
+                        $accessStyle = match($registration->access_status) {
+                        'green'  => 'bg-green-100 text-green-800',
+                        'blue'   => 'bg-blue-100 text-blue-800',
+                        'orange' => 'bg-amber-100 text-amber-800',
+                        default  => 'bg-red-100 text-red-800',
+                    };
+                    $accessText = match($registration->access_status) {
+                        'green'  => 'Zutritt ok',
+                        'blue'   => 'Schnuppergast',
+                        'orange' => 'Warnung',
+                        default  => 'Gesperrt',
+                    };
                     @endphp
 
                     @if (!$shownDividerMobile && !$currentCheckin)
@@ -361,6 +374,19 @@
                                 
                                     // Warnung im Modal: nächster Check-in sperrt
                                     $nextCheckinTriggersRed = $registration->member_type === 'guest' && $visits === 2;
+                                    
+                                    $accessStyle = match($registration->access_status) {
+                                        'green'  => 'bg-green-100 text-green-800',
+                                        'blue'   => 'bg-blue-100 text-blue-800',
+                                        'orange' => 'bg-amber-100 text-amber-800',
+                                        default  => 'bg-red-100 text-red-800',
+                                    };
+                                    $accessText = match($registration->access_status) {
+                                        'green'  => 'Zutritt ok',
+                                        'blue'   => 'Schnuppergast',
+                                        'orange' => 'Warnung',
+                                        default  => 'Gesperrt',
+                                    };
                                 @endphp
 
                                 @if (!$shownDivider && !$currentCheckin)
