@@ -289,7 +289,7 @@
                         {{-- Aktion --}}
                         <div class="border-t border-gray-100 pt-3">
                             @if($currentCheckin)
-                                <span class="text-sm text-gray-500">Eingecheckt {{ $currentCheckin->checkedinat->format('H:i') }} Uhr</span>
+                                <span class="text-sm text-gray-500">Eingecheckt {{ $currentCheckin->checked_in_at->format('H:i') }} Uhr</span>
                             @elseif($isHardBlocked)
                                 <button type="button" disabled
                                     class="w-full inline-flex items-center justify-center border border-gray-200 bg-gray-100 text-gray-400 rounded-lg px-3 py-2 text-sm font-semibold cursor-not-allowed min-h-[44px]">
@@ -473,7 +473,7 @@
                                     {{-- CHECK-IN AKTION --}}
                                     <td class="px-4 py-4 align-top">
                                         @if($currentCheckin)
-                                            <span class="text-sm text-gray-500">Eingecheckt {{ $currentCheckin->checkedinat->format('H:i') }} Uhr</span>
+                                            <span class="text-sm text-gray-500">Eingecheckt {{ $currentCheckin->checked_in_at->format('H:i') }} Uhr</span>
                                         @elseif($isHardBlocked)
                                             <button type="button" disabled
                                                 class="inline-flex items-center justify-center border border-gray-200 bg-gray-100 text-gray-400 rounded-lg px-3 py-2 text-sm font-semibold cursor-not-allowed">
