@@ -46,29 +46,26 @@ class RegistrationController extends Controller
         }
 
         $validated = $request->validate([
-            'first_name'          => 'required|string|max:255',
-            'last_name'           => 'required|string|max:255',
-            'birth_date'          => 'required|date|after_or_equal:1900-01-01|before_or_equal:today',
-            'email'              => 'nullable|email|max:255',
-            'member_type'         => 'required|in:member,guest',
-            'member_number'       => [
+            'first_name'            => 'required|string|max:255',
+            'last_name'             => 'required|string|max:255',
+            'birth_date'            => 'required|date|after_or_equal:1900-01-01|before_or_equal:today',
+            'email'                 => 'nullable|email|max:255',
+            'member_type'           => 'required|in:member,guest',
+            'member_number'         => [
                 'required_if:member_type,member',
                 'nullable',
                 'string',
-                // ✅ NEU: Format XX-XXXXX erzwingen
                 'regex:/^\d{2}-\d{5}$/',
             ],
-            'waiver_accepted'     => 'required|accepted',
-            'rules_accepted'     => 'required|accepted',
+            'waiver_accepted'       => 'required|accepted',
+            'rules_accepted'        => 'required|accepted',
             'supervision_confirmed' => 'nullable|boolean',
-            // Honeypot-Felder
-            'hp_time'             => 'required|integer',
-            'website'            => 'nullable|max:0',
-            'fax_number'          => 'nullable|max:0',
+            'hp_time'               => 'required|integer',
+            'website'               => 'nullable|max:0',
+            'fax_number'            => 'nullable|max:0',
         ], [
-            'birth_date.required'   => 'Das Geburtsdatum ist erforderlich, um doppelte Registrierungen zu vermeiden.',
-            // ✅ NEU: Fehlermeldung für Format-Validierung
-            'member_number.regex'   => 'Die Mitgliedsnummer muss im Format XX-XXXXX eingegeben werden (z.B. 12-34567).',
+            'birth_date.required'  => 'Das Geburtsdatum ist erforderlich, um doppelte Registrierungen zu vermeiden.',
+            'member_number.regex'  => 'Die Mitgliedsnummer muss im Format XX-XXXXX eingegeben werden (z.B. 12-34567).',
         ]);
 
         // Freitextfelder bereinigen
@@ -78,8 +75,8 @@ class RegistrationController extends Controller
             ? strip_tags($validated['member_number'])
             : null;
 
-        $birthDate       = Carbon::parse($validated['birth_date']);
-        $age             = $birthDate->age;
+        $birthDate          = Carbon::parse($validated['birth_date']);
+        $age                = $birthDate->age;
         $needsSupervision   = $age < 14;
         $needsParentConsent = $age >= 14 && $age < 18;
 
@@ -95,16 +92,16 @@ class RegistrationController extends Controller
             $member = DB::table('members')
                 ->where('member_number', $validated['member_number'])
                 ->first();
-        
+
             $lastNameInput = strtolower(trim($validated['last_name']));
             $birthInput    = Carbon::parse($validated['birth_date'])->toDateString();
-        
+
             if ($member) {
                 $lastNameDb = strtolower(trim($member->last_name ?? ''));
                 $birthDb    = $member->birth_date
                     ? Carbon::parse($member->birth_date)->toDateString()
                     : null;
-        
+
                 if ($lastNameInput !== $lastNameDb || $birthInput !== $birthDb) {
                     throw ValidationException::withMessages([
                         'member_number' => 'Die Mitgliedsnummer stimmt nicht mit den angegebenen Daten (Nachname + Geburtsdatum) überein. Bitte prüfen!',
@@ -115,7 +112,7 @@ class RegistrationController extends Controller
                     ->whereRaw('LOWER(last_name) = ?', [$lastNameInput])
                     ->whereDate('birth_date', $birthInput)
                     ->exists();
-        
+
                 if ($nameBirthMatch) {
                     throw ValidationException::withMessages([
                         'member_number' => 'Die Mitgliedsnummer stimmt nicht mit den angegebenen Daten (Nachname + Geburtsdatum) überein. Bitte prüfen!',
@@ -134,7 +131,7 @@ class RegistrationController extends Controller
         }
         $existingReg = $query->first();
 
-        // FIX 1: Gast-Upgrade nach Name/Birthdate suchen, falls Mitglied kein Treffer
+        // Gast-Upgrade nach Name/Birthdate suchen, falls Mitglied kein Treffer
         if (!$existingReg && $validated['member_type'] === 'member') {
             $existingReg = Registration::whereRaw('LOWER(last_name) = ?', [strtolower(trim($validated['last_name']))])
                 ->where('birth_date', $validated['birth_date'])
@@ -142,20 +139,30 @@ class RegistrationController extends Controller
                 ->first();
         }
 
-        // Zugangsstatus bestimmen
-        $accessStatus = 'red';
-        $accessReason = 'Unbekannt';
+        // ── Zugangsstatus bestimmen ────────────────────────────────────
+        $accessStatus  = 'red';
+        $accessReason  = null;
         $paymentStatus = 'paid';
 
         if ($validated['member_type'] === 'guest') {
             $validated['member_number'] = null;
-            if (!$existingReg) {
+            $existingVisits = $existingReg?->trial_visits_count ?? 0;
+
+            if ($existingVisits >= 3) {
+                // Sollte durch die Sperre weiter unten eigentlich nicht erreicht werden,
+                // aber als Absicherung:
+                $accessStatus = 'red';
+                $accessReason = 'Schnupperlimit ausgeschöpft (3/3)';
+            } elseif ($existingVisits >= 1) {
+                // Bereits mindestens 1 Besuch → kommt ins Modal beim nächsten Check-in
                 $accessStatus = 'blue';
-                $accessReason = 'Schnupperklettern';
+                $accessReason = 'Schnupperklettern: Besuch ' . ($existingVisits + 1) . ' von 3';
             } else {
-                $accessStatus = 'orange';
-                $accessReason = 'Kulanz: ' . $existingReg->manual_exception_reason;
+                // Erstregistrierung
+                $accessStatus = 'blue';
+                $accessReason = null;
             }
+
         } elseif ($validated['member_type'] === 'member') {
             if (!$member) {
                 $accessStatus  = 'orange';
@@ -171,49 +178,48 @@ class RegistrationController extends Controller
                 $paymentStatus = 'overdue';
             } else {
                 $accessStatus = 'green';
-                $accessReason = 'Mitgliedschaft aktiv & bezahlt';
+                $accessReason = null;
             }
         }
 
-        // Aufsicht-Logik
+        // Aufsicht-Logik (ergänzt den bestehenden Reason)
         if ($needsSupervision) {
-            if ($validated['member_type'] === 'guest') {
-                $accessReason .= ' · Unter 14 – Aufsicht erforderlich';
+            $supervisionNote = 'Unter 14 – Aufsicht erforderlich';
+            if ($accessReason) {
+                $accessReason .= ' · ' . $supervisionNote;
             } else {
-                if ($request->boolean('supervision_confirmed')) {
-                    $accessStatus = 'green';
-                    $accessReason = 'Unter 14 – Aufsicht erforderlich';
-                } else {
-                    $accessStatus = 'orange';
-                    $accessReason = 'Unter 14 – Aufsicht erforderlich';
-                }
+                $accessReason = $supervisionNote;
+            }
+            if ($validated['member_type'] === 'member') {
+                $accessStatus = $request->boolean('supervision_confirmed') ? 'green' : 'orange';
             }
         }
 
         if ($needsParentConsent) {
-            if ($validated['member_type'] === 'guest') {
-                $accessReason .= ' · Jugendlicher (14–17)';
+            $consentNote = 'Jugendlicher (14–17)';
+            if ($accessReason) {
+                $accessReason .= ' · ' . $consentNote;
             } else {
+                $accessReason = $consentNote;
+            }
+            if ($validated['member_type'] === 'member') {
                 $accessStatus = 'green';
-                $accessReason = 'Jugendlicher (14–17)';
             }
         }
 
-        // GAST-BLOCK / Upgrade-Logik
+        // ── GAST-BLOCK / Upgrade-Logik ────────────────────────────────
         if ($existingReg) {
-            // FIX 2: Upgrade-Logik Gast → Mitglied erlauben
             $isUpgrade = $existingReg->member_type === 'guest' && $validated['member_type'] === 'member';
 
             if (!$isUpgrade) {
                 if ($existingReg->member_type === 'guest') {
-                    if (($existingReg->trial_visits_count ?? 0) >= 2) {
+                    if (($existingReg->trial_visits_count ?? 0) >= 3) {
                         throw ValidationException::withMessages([
                             'first_name' => 'Du hast das Schnupper-Limit bereits vollständig ausgeschöpft. Eine weitere Registrierung als Gast ist nicht möglich.',
                         ]);
                     }
-                    $hasKulanz = $existingReg->manual_exception_until &&
-                                 $existingReg->manual_exception_until->isFuture();
-                    if (!$hasKulanz) {
+                    // Bereits registriert, aber noch Besuche übrig → nur erlaubt mit Staff-Freigabe
+                    if (($existingReg->trial_visits_count ?? 0) >= 1) {
                         throw ValidationException::withMessages([
                             'first_name' => 'Du bist bereits als Schnuppergast registriert. Ein zweites Mal ist nur nach Absprache mit dem Hallendienst möglich.',
                         ]);
@@ -224,47 +230,46 @@ class RegistrationController extends Controller
                 }
             }
 
-            // FIX 3: member_type & member_number mitschreiben
             $existingReg->update([
-                'member_type'              => $validated['member_type'],
-                'member_number'            => $validated['member_number'] ?? null,
-                'waiver_accepted'          => true,
-                'birth_date'               => $validated['birth_date'],
-                'email'                   => $validated['email'] ?? null,
-                'access_status'            => $accessStatus,
-                'access_reason'            => $accessReason,
-                'payment_status'            => $paymentStatus,
-                'needs_supervision'        => $needsSupervision,
-                'needs_parent_consent'      => $needsParentConsent,
-                'parent_consent_received'   => $needsParentConsent ? $existingReg->parent_consent_received : false,
+                'member_type'                => $validated['member_type'],
+                'member_number'              => $validated['member_number'] ?? null,
+                'waiver_accepted'            => true,
+                'birth_date'                 => $validated['birth_date'],
+                'email'                      => $validated['email'] ?? null,
+                'access_status'              => $accessStatus,
+                'access_reason'              => $accessReason,
+                'payment_status'             => $paymentStatus,
+                'needs_supervision'          => $needsSupervision,
+                'needs_parent_consent'       => $needsParentConsent,
+                'parent_consent_received'    => $needsParentConsent ? $existingReg->parent_consent_received : false,
                 'parent_consent_received_at' => $needsParentConsent ? $existingReg->parent_consent_received_at : null,
-                'supervision_confirmed'    => $needsSupervision
+                'supervision_confirmed'      => $needsSupervision
                     ? $request->boolean('supervision_confirmed')
                     : false,
             ]);
             $registration = $existingReg;
         } else {
             $registration = Registration::create([
-                'first_name'               => $validated['first_name'],
-                'last_name'                => $validated['last_name'],
-                'birth_date'               => $validated['birth_date'],
-                'email'                   => $validated['email'] ?? null,
-                'member_type'              => $validated['member_type'],
-                'member_number'            => $validated['member_number'] ?? null,
-                'waiver_accepted'          => true,
-                'waiver_version'           => 'v1',
-                'payment_status'           => $paymentStatus,
-                'access_status'            => $accessStatus,
-                'access_reason'            => $accessReason,
-                'trial_visits_count'        => 0,
-                'needs_supervision'        => $needsSupervision,
-                'needs_parent_consent'      => $needsParentConsent,
-                'parent_consent_received'   => false,
+                'first_name'                 => $validated['first_name'],
+                'last_name'                  => $validated['last_name'],
+                'birth_date'                 => $validated['birth_date'],
+                'email'                      => $validated['email'] ?? null,
+                'member_type'                => $validated['member_type'],
+                'member_number'              => $validated['member_number'] ?? null,
+                'waiver_accepted'            => true,
+                'waiver_version'             => 'v1',
+                'payment_status'             => $paymentStatus,
+                'access_status'              => $accessStatus,
+                'access_reason'              => $accessReason,
+                'trial_visits_count'         => 0,
+                'needs_supervision'          => $needsSupervision,
+                'needs_parent_consent'       => $needsParentConsent,
+                'parent_consent_received'    => false,
                 'parent_consent_received_at' => null,
-                'supervision_confirmed'    => $needsSupervision
+                'supervision_confirmed'      => $needsSupervision
                     ? $request->boolean('supervision_confirmed')
                     : false,
-                'qr_token'                 => (string) Str::uuid(),
+                'qr_token'                   => (string) Str::uuid(),
             ]);
         }
 
@@ -332,7 +337,7 @@ class RegistrationController extends Controller
 
         Checkin::create([
             'registration_id' => $registration->id,
-            'checked_in_at'     => now(),
+            'checked_in_at'   => now(),
         ]);
         $registration->increment('trial_visits_count');
 

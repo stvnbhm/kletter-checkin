@@ -3,124 +3,126 @@
 namespace App\Http\Controllers;
 
 use App\Models\Checkin;
-use App\Models\Member;
 use App\Models\Registration;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 
 class StaffController extends Controller
 {
     public function index(Request $request)
     {
         $query = $request->input('q');
-    
+
         $registrations = Registration::with('member', 'currentCheckin')
             ->when($query, function ($q) use ($query) {
                 $q->where(function ($sub) use ($query) {
-                    $sub->where('first_name', 'like', "%$query%")
-                        ->orWhere('last_name', 'like', "%$query%")
-                        ->orWhere('member_number', 'like', "%$query%");
+                    $sub->where('first_name', 'like', '%' . $query . '%')
+                        ->orWhere('last_name', 'like', '%' . $query . '%')
+                        ->orWhere('member_number', 'like', '%' . $query . '%');
                 });
             })
             ->orderByDesc('created_at')
             ->get()
             ->sortByDesc(fn($r) => $r->currentCheckin?->checked_in_at?->timestamp ?? 0);
-    
+
         $stats = [
             'checkedInToday'     => Checkin::whereDate('checked_in_at', today())->count(),
             'guestsToday'        => Checkin::whereDate('checked_in_at', today())
-                ->whereHas('registration', fn($q) => $q->where('member_type', 'guest'))
-                ->count(),
+                                        ->whereHas('registration', fn($q) => $q->where('member_type', 'guest'))
+                                        ->count(),
             'membersToday'       => Checkin::whereDate('checked_in_at', today())
-                ->whereHas('registration', fn($q) => $q->where('member_type', 'member'))
-                ->count(),
+                                        ->whereHas('registration', fn($q) => $q->where('member_type', 'member'))
+                                        ->count(),
             'totalRegistrations' => Registration::count(),
         ];
-    
+
         return view('staff.index', compact('registrations', 'query', 'stats'));
     }
 
-    public function checkin(Registration $registration)
+    public function checkin(Registration $registration): RedirectResponse
     {
         $registration->load('currentCheckin', 'member');
-    
+
+        // Bereits eingecheckt?
+        if ($registration->currentCheckin) {
+            return redirect()->route('staff')
+                ->with('error', $registration->first_name . ' ' . $registration->last_name . ' ist bereits eingecheckt.');
+        }
+
+        $visits = $registration->trial_visits_count ?? 0;
+
+        // ── HART GESPERRT ──────────────────────────────────────────────
         if ($registration->access_status === 'red') {
             return redirect()->route('staff')
-                ->with('error', 'Check-in verweigert – Kein Zutritt erlaubt.');
+                ->with('error', 'Check-in verweigert – ' . $registration->first_name . ' hat keinen Zutritt (Status: rot).');
         }
-    
-        if ($registration->currentCheckin) {
+
+        // Schnuppergast ab Besuch 4 (3 bereits absolviert) → gesperrt
+        if ($registration->member_type === 'guest' && $visits >= 3) {
             return redirect()->route('staff')
-                ->with('error', 'Diese Person ist bereits eingecheckt.');
+                ->with('error', 'Check-in verweigert – Schnupperlimit (3 Besuche) ausgeschöpft.');
         }
-    
-        // ✅ FIX: Kulanzgrund wurde mitgeschickt → Kulanz SOFORT setzen,
-        //         BEVOR die Schnuppergast-Sperre greift
+
+        // ── MODAL ERFORDERLICH ─────────────────────────────────────────
+        // Orange → modal-pflicht
+        // Schnuppergast ab Besuch 2 (visits >= 1) → modal-pflicht
+        $requiresModal = $registration->access_status === 'orange'
+                      || ($registration->member_type === 'guest' && $visits >= 1);
+
         $reason = strip_tags(request('reason', ''));
-        if ($reason) {
-            $registration->update([
-                'manual_exception_reason' => $reason,
-                'manual_exception_until'  => now()->endOfDay(),
-                'access_reason'           => 'Kulanz: ' . $reason,
-            ]);
-            // Relation neu laden damit isFuture() unten korrekt funktioniert
-            $registration->refresh();
+
+        if ($requiresModal && $reason === '') {
+            return redirect()->route('staff')
+                ->with('error', 'Check-in verweigert – Bestätigung mit Grund erforderlich.');
         }
-    
-        // Orange-Status protokollieren (für den orange-Modal-Flow)
-        if ($registration->access_status === 'orange' && $reason) {
-            $registration->update(['access_reason' => 'Orange-Checkin: ' . $reason]);
-            $registration->refresh();
-        }
-    
-        // Schnuppergast-Limit-Prüfung (greift jetzt NICHT mehr, wenn Kulanz gesetzt)
-        if ($registration->member_type === 'guest' && $registration->trial_visits_count >= 1) {
-            $hasActiveKulanz = $registration->manual_exception_until?->isFuture();
-            if (! $hasActiveKulanz) {
-                return redirect()->route('staff')
-                    ->with('error', 'Check-in verweigert – Schnuppergast hat den Erstbesuch bereits absolviert. Bitte Kulanz gewähren.');
-            }
-        }
-    
-        // Unverified Member: max. 3 Check-ins
-        $isUnverifiedMember = $registration->member_type === 'member' && $registration->member === null;
-    
+
+        // ── UNVERIFIED MEMBER: max. 3 Check-ins ───────────────────────
+        $isUnverifiedMember = $registration->member_type === 'member'
+                           && $registration->member === null;
+
         if ($isUnverifiedMember) {
             $totalCheckins = Checkin::where('registration_id', $registration->id)->count();
-    
             if ($totalCheckins >= 3) {
                 $registration->update([
                     'access_status' => 'red',
                     'access_reason' => 'Mitgliedsnummer nicht im System – Limit erreicht',
                 ]);
-    
-                return redirect()
-                    ->route('staff')
-                    ->with('error', 'Check-in verweigert – Mitgliedsnummer nicht im Mitgliedersystem. Limit von 3 Besuchen ausgeschöpft.');
+                return redirect()->route('staff')
+                    ->with('error', 'Check-in verweigert – Mitgliedsnummer nicht gefunden. Limit von 3 Besuchen ausgeschöpft.');
             }
         }
-    
+
+        // ── CHECK-IN DURCHFÜHREN ───────────────────────────────────────
+        if ($reason !== '') {
+            $registration->update([
+                'access_reason' => 'Manuelle Freigabe: ' . $reason,
+            ]);
+        }
+
         Checkin::create([
             'registration_id' => $registration->id,
             'checked_in_at'   => now(),
         ]);
-    
+
         $registration->increment('trial_visits_count');
-        
-        // Schnuppergast: access_reason mit Checkin-Zeitpunkt aktualisieren
-        if ($registration->member_type === 'guest') {
+        $registration->refresh();
+
+        // Nach Check-in: Status-Update Schnuppergast
+        if ($registration->member_type === 'guest' && $registration->trial_visits_count >= 3) {
             $registration->update([
-                'access_reason' => 'Schnupperklettern: Letzter Besuch am ' 
-                    . now()->format('d.m.Y \u\m H:i') . ' Uhr',
+                'access_status' => 'red',
+                'access_reason' => 'Schnupperlimit ausgeschöpft (3/3)',
+            ]);
+        } elseif ($registration->member_type === 'guest') {
+            $registration->update([
+                'access_reason' => 'Schnupperklettern: Letzter Besuch am ' . now()->format('d.m.Y \u\m H:i') . ' Uhr',
             ]);
         }
-    
-        // Nach Check-in prüfen ob Limit jetzt erreicht
+
+        // Unverified Member nach 3 Besuchen → rot
         if ($isUnverifiedMember) {
             $totalCheckins = Checkin::where('registration_id', $registration->id)->count();
-    
             if ($totalCheckins >= 3) {
                 $registration->update([
                     'access_status' => 'red',
@@ -128,107 +130,40 @@ class StaffController extends Controller
                 ]);
             }
         }
-    
-        return redirect()
-            ->route('staff')
-            ->with('success', $registration->first_name . ' ' . $registration->last_name . ' wurde erfolgreich eingecheckt.');
+
+        return redirect()->route('staff')
+            ->with('success', '✓ ' . $registration->first_name . ' ' . $registration->last_name . ' eingecheckt.');
     }
 
-    public function grantKulanz(Request $request, Registration $registration)
-    {
-        $request->validate([
-            'reason' => 'required|string|max:255',
-        ]);
-    
-        $reason = strip_tags($request->reason); // ← NEU
-    
-        $registration->update([
-            'manual_exception_reason' => $reason,
-            'manual_exception_until'  => now()->endOfDay(),
-            'access_status'           => 'orange',
-            'access_reason'           => 'Kulanz: ' . $reason,
-        ]);
-    
-        return redirect()
-            ->route('staff')
-            ->with('success', 'Kulanz gewährt für ' . e($registration->first_name) . '!');
-    }
-    
-        /**
-     * Kulanz erteilen UND sofort Check-in durchführen (für orange-Status).
-     */
-     
-    public function kulanzCheckin(Request $request, Registration $registration): RedirectResponse
-    {
-        $request->validate([
-            'reason' => 'required|string|max:255',
-        ]);
-    
-        $reason = strip_tags($request->reason);
-    
-        $registration->load('currentCheckin');
-        if ($registration->currentCheckin) {
-            return redirect()
-                ->route('staff')
-                ->with('error', e($registration->first_name) . ' ist bereits eingecheckt.');
-        }
-    
-        // 1. Kulanz erteilen
-        $registration->update([
-            'manual_exception_reason' => $reason,
-            'manual_exception_until'  => now()->endOfDay(),
-            'access_status'           => 'orange',
-            'access_reason'           => 'Kulanz: ' . $reason,
-        ]);
-    
-        // 2. Check-in sofort durchführen
-        Checkin::create([
-            'registration_id' => $registration->id,
-            'checked_in_at'   => now(),
-        ]);
-    
-        $registration->increment('trial_visits_count');
-    
-        return redirect()
-            ->route('staff')
-            ->with('success', '✓ Kulanz erteilt & ' . e($registration->first_name) . ' ' . e($registration->last_name) . ' eingecheckt.');
-    }
-    
     public function checkoutAll(): RedirectResponse
     {
         $now = now();
-    
         $openCheckins = Checkin::whereNull('checked_out_at')->get();
         $count = $openCheckins->count();
-    
+
         foreach ($openCheckins as $checkin) {
             $checkin->update(['checked_out_at' => $now]);
-    
-            $registration = Registration::find($checkin->registration_id);
+
+            $registration = Registration::with('member')->find($checkin->registration_id);
             if (!$registration) continue;
-    
+
             $registration->update(['checked_in_at' => null]);
-    
-            // Schnuppergast: nach 3 Besuchen → red
-            if ($registration->member_type === 'guest'
-                && $registration->trial_visits_count >= 3) {
+
+            if ($registration->member_type === 'guest' && $registration->trial_visits_count >= 3) {
                 $registration->update([
                     'access_status' => 'red',
                     'access_reason' => 'Schnupperlimit ausgeschöpft (3/3)',
                 ]);
-            // Schnuppergast: noch Besuche übrig → Timestamp des letzten Besuchs speichern
-            } elseif ($registration->member_type === 'guest'
-                && $registration->trial_visits_count >= 1) {
+            } elseif ($registration->member_type === 'guest' && $registration->trial_visits_count >= 1) {
                 $registration->update([
                     'access_reason' => 'Schnupperklettern: Letzter Besuch am '
                         . $checkin->checked_in_at->format('d.m.Y \u\m H:i') . ' Uhr',
                 ]);
             }
-    
-            // Unverified Member: nach 3 Besuchen → red
+
             $isUnverifiedMember = $registration->member_type === 'member'
-                                  && $registration->member === null;
-    
+                                && $registration->member === null;
+
             if ($isUnverifiedMember && $registration->trial_visits_count >= 3) {
                 $registration->update([
                     'access_status' => 'red',
@@ -236,12 +171,12 @@ class StaffController extends Controller
                 ]);
             }
         }
-    
+
         return redirect()->route('staff')
             ->with('success', '✓ ' . $count . ' ' . ($count === 1 ? 'Person' : 'Personen') . ' ausgecheckt.');
     }
 
-    public function confirmParentConsent(Registration $registration)
+    public function confirmParentConsent(Registration $registration): RedirectResponse
     {
         $registration->update([
             'parent_consent_received'    => true,
@@ -249,22 +184,23 @@ class StaffController extends Controller
             'needs_parent_consent'       => false,
         ]);
 
-        return redirect()
-            ->route('staff')
+        return redirect()->route('staff')
             ->with('success', 'Einverständniserklärung wurde bestätigt.');
+    }
+
+    public function importMembers(Request $request): RedirectResponse
+    {
+        return redirect()->route('staff')
+            ->with('error', 'Import bitte über den Admin-Bereich durchführen.');
     }
 
     private function parseCsvDate(?string $value): ?Carbon
     {
         $value = trim((string) $value);
-
-        if ($value === '') {
-            return null;
-        }
-
+        if ($value === '') return null;
         try {
             return Carbon::createFromFormat('d.m.Y', $value);
-        } catch (\Throwable $e) {
+        } catch (\Throwable) {
             return null;
         }
     }
@@ -272,7 +208,6 @@ class StaffController extends Controller
     private function nullIfEmpty(?string $value): ?string
     {
         $value = trim((string) $value);
-
         return $value === '' ? null : $value;
     }
 }

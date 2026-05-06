@@ -176,48 +176,27 @@
 
                 @forelse ($registrations as $registration)
                     @php
-                        $currentCheckin  = $registration->currentCheckin;
-                        $hasActiveKulanz = $registration->manual_exception_until
-                                           && $registration->manual_exception_until->isFuture();
-                        $visits          = $registration->trial_visits_count ?? 0;
-
+                        $currentCheckin = $registration->currentCheckin;
+                        $visits         = $registration->trial_visits_count ?? 0;
+                        $lastCheckin    = $registration->checkins()->latest('checked_in_at')->first();
+                    
                         $isTrialMaxReached         = $registration->member_type === 'guest' && $visits >= 3;
                         $isUnverifiedMemberBlocked = $registration->member_type === 'member'
-                                                     && $registration->member === null
-                                                     && $registration->access_status === 'red';
-                        $isTrialLimitReached       = $registration->member_type === 'guest'
-                                                     && $visits >= 1 && $visits < 3
-                                                     && !$hasActiveKulanz;
-
-                        $isHardBlocked   = $isTrialMaxReached
-                                        || $isUnverifiedMemberBlocked
-                                        || $registration->access_status === 'red';
-
-                        $isNeedsModal   = ($registration->access_status === 'orange'
-                                        && !$hasActiveKulanz)
-                                        || $isTrialLimitReached;
-
-                        $kulanzHint = match(true) {
-                            $registration->access_status === 'red' => 'Person gesperrt',
-                            $isTrialLimitReached => $registration->access_reason 
-                                ?? ('Schnupperlimit erreicht (' . $visits . ')'),
-                            default => 'Aktion erforderlich',
-                        };
-                        $hintIcon  = $registration->access_status === 'red' ? '🚫' : '⚠️';
-                        $hintColor = $registration->access_status === 'red' ? 'text-red-600' : 'text-amber-600';
-
-                        $accessStyle = match ($registration->access_status) {
-                            'green'  => 'bg-green-100 text-green-800',
-                            'blue'   => 'bg-blue-100 text-blue-800',
-                            'orange' => 'bg-amber-100 text-amber-800',
-                            default  => 'bg-red-100 text-red-800',
-                        };
-                        $accessText = match ($registration->access_status) {
-                            'green'  => 'Zutritt ok',
-                            'blue'   => 'Schnuppern',
-                            'orange' => $registration->manual_exception_reason ? 'Kulanz' : 'Warnung',
-                            default  => 'Gesperrt',
-                        };
+                                                   && $registration->member === null
+                                                   && $registration->access_status === 'red';
+                    
+                        // Hart gesperrt = keine Aktion möglich
+                        $isHardBlocked = $registration->access_status === 'red'
+                                      || $isTrialMaxReached
+                                      || $isUnverifiedMemberBlocked;
+                    
+                        // Modal nötig = orange ODER Schnuppergast Besuch 2–3
+                        $isTrialNeedsModal = $registration->member_type === 'guest' && $visits >= 1 && $visits < 3;
+                        $requiresModal     = !$isHardBlocked
+                                          && ($registration->access_status === 'orange' || $isTrialNeedsModal);
+                    
+                        // Warnung im Modal: nächster Check-in sperrt
+                        $nextCheckinTriggersRed = $registration->member_type === 'guest' && $visits === 2;
                     @endphp
 
                     @if (!$shownDividerMobile && !$currentCheckin)
@@ -287,46 +266,46 @@
                         {{-- ── Aktion (Mobile) ──────────────────────────────── --}}
                         <div class="border-t border-gray-100 pt-3">
                             @if ($currentCheckin)
-                                <span class="text-sm text-gray-500">
-                                    Eingecheckt {{ $currentCheckin->checked_in_at->format('H:i') }} Uhr
-                                </span>
+                                <span>Eingecheckt {{ $currentCheckin->checked_in_at->format('H:i') }} Uhr</span>
+                            
                             @elseif ($isHardBlocked)
-                                <button type="button" disabled
-                                    class="w-full inline-flex items-center justify-center border border-gray-200
-                                           bg-gray-100 text-gray-400 rounded-lg px-3 py-2 text-sm font-semibold
-                                           cursor-not-allowed min-h-[44px]">
-                                    Check-in
-                                </button>
-                            @elseif ($isNeedsModal)
-                                {{-- Orange ohne aktive Kulanz → Modal --}}
-                                <form id="checkin-form-mob-{{ $registration->id }}"
-                                      method="POST"
-                                      action="{{ route('staff.checkin', $registration) }}"
-                                      class="hidden">
+                                <button disabled class="w-full inline-flex items-center justify-center border border-gray-200
+                                                       bg-gray-100 text-gray-400 rounded-lg px-3 py-2 text-sm font-semibold
+                                                       cursor-not-allowed min-h-[44px]">
+                                   Check-in
+                               </button>
+                            
+                            @elseif ($requiresModal)
+                                {{-- Verstecktes Formular --}}
+                                <form id="checkin-form-{{ $registration->id }}" method="POST"
+                                      action="{{ route('staff.checkin', $registration) }}" class="hidden">
                                     @csrf
-                                    <input type="text" name="reason" id="reason-mob-{{ $registration->id }}">
+                                    <input type="text" name="reason" id="reason-{{ $registration->id }}">
                                 </form>
                                 <button type="button"
-                                    onclick="openOrangeCheckin(
-                                        document.getElementById('checkin-form-mob-{{ $registration->id }}'),
-                                        document.getElementById('reason-mob-{{ $registration->id }}'),
+                                    onclick="openCheckinModal(
+                                        document.getElementById('checkin-form-{{ $registration->id }}'),
+                                        document.getElementById('reason-{{ $registration->id }}'),
                                         '{{ e($registration->first_name . ' ' . $registration->last_name) }}',
-                                        '{{ e($registration->access_reason ?? 'Kein Grund angegeben') }}',
-                                        {{ $isTrialLimitReached ? 'true' : 'false' }}
+                                        '{{ e($registration->access_reason ?? '') }}',
+                                        '{{ $registration->access_status }}',
+                                        {{ $nextCheckinTriggersRed ? 'true' : 'false' }},
+                                        {{ $visits }},
+                                        '{{ $lastCheckin ? $lastCheckin->checked_in_at->format('d.m.Y H:i') : '' }}'
                                     )"
                                     class="w-full inline-flex items-center justify-center border border-transparent
                                            bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold
                                            hover:bg-indigo-700 transition min-h-[44px] touch-manipulation">
                                     Check-in
                                 </button>
+                            
                             @else
                                 <form method="POST" action="{{ route('staff.checkin', $registration) }}">
                                     @csrf
-                                    <button type="submit"
-                                        class="w-full inline-flex items-center justify-center border border-transparent
-                                               bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold
-                                               hover:bg-indigo-700 transition min-h-[44px] touch-manipulation">
-                                        Check-in
+                                    <button type="submit" class="w-full inline-flex items-center justify-center border border-transparent
+                            	                                   bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold
+                            	                                   hover:bg-indigo-700 transition min-h-[44px] touch-manipulation">
+                                       Check-in
                                     </button>
                                 </form>
                             @endif
@@ -361,48 +340,27 @@
 
                             @forelse ($registrations as $registration)
                                 @php
-                                    $currentCheckin  = $registration->currentCheckin;
-                                    $hasActiveKulanz = $registration->manual_exception_until
-                                                       && $registration->manual_exception_until->isFuture();
-                                    $visits          = $registration->trial_visits_count ?? 0;
-
+                                    $currentCheckin = $registration->currentCheckin;
+                                    $visits         = $registration->trial_visits_count ?? 0;
+                                    $lastCheckin    = $registration->checkins()->latest('checked_in_at')->first();
+                                
                                     $isTrialMaxReached         = $registration->member_type === 'guest' && $visits >= 3;
                                     $isUnverifiedMemberBlocked = $registration->member_type === 'member'
-                                                                 && $registration->member === null
-                                                                 && $registration->access_status === 'red';
-                                    $isTrialLimitReached       = $registration->member_type === 'guest'
-                                                                 && $visits >= 1 && $visits < 3
-                                                                 && !$hasActiveKulanz;
-
-                                    $isHardBlocked   = $isTrialMaxReached
-                                                    || $isUnverifiedMemberBlocked
-                                                    || $registration->access_status === 'red';
-
-                                    $isNeedsModal   = ($registration->access_status === 'orange'
-                                                    && !$hasActiveKulanz)
-                                        || $isTrialLimitReached;
-
-                                    $kulanzHint = match(true) {
-                                        $registration->access_status === 'red' => 'Person gesperrt',
-                                        $isTrialLimitReached => $registration->access_reason 
-                                            ?? ('Schnupperlimit erreicht (' . $visits . ')'),
-                                        default => 'Aktion erforderlich',
-                                    };
-                                    $hintIcon  = $registration->access_status === 'red' ? '🚫' : '⚠️';
-                                    $hintColor = $registration->access_status === 'red' ? 'text-red-600' : 'text-amber-600';
-
-                                    $accessStyle = match ($registration->access_status) {
-                                        'green'  => 'bg-green-100 text-green-800',
-                                        'blue'   => 'bg-blue-100 text-blue-800',
-                                        'orange' => 'bg-amber-100 text-amber-800',
-                                        default  => 'bg-red-100 text-red-800',
-                                    };
-                                    $accessText = match ($registration->access_status) {
-                                        'green'  => 'Zutritt ok',
-                                        'blue'   => 'Schnuppergast',
-                                        'orange' => $registration->manual_exception_reason ? 'Kulanz' : 'Warnung',
-                                        default  => 'Gesperrt',
-                                    };
+                                                               && $registration->member === null
+                                                               && $registration->access_status === 'red';
+                                
+                                    // Hart gesperrt = keine Aktion möglich
+                                    $isHardBlocked = $registration->access_status === 'red'
+                                                  || $isTrialMaxReached
+                                                  || $isUnverifiedMemberBlocked;
+                                
+                                    // Modal nötig = orange ODER Schnuppergast Besuch 2–3
+                                    $isTrialNeedsModal = $registration->member_type === 'guest' && $visits >= 1 && $visits < 3;
+                                    $requiresModal     = !$isHardBlocked
+                                                      && ($registration->access_status === 'orange' || $isTrialNeedsModal);
+                                
+                                    // Warnung im Modal: nächster Check-in sperrt
+                                    $nextCheckinTriggersRed = $registration->member_type === 'guest' && $visits === 2;
                                 @endphp
 
                                 @if (!$shownDivider && !$currentCheckin)
@@ -478,51 +436,50 @@
                                     {{-- ── CHECK-IN AKTION (Desktop) ──────────────── --}}
                                     <td class="px-4 py-4 align-top">
                                         @if ($currentCheckin)
-                                            <span class="text-sm text-gray-500">
-                                                Eingecheckt {{ $currentCheckin->checked_in_at->format('H:i') }} Uhr
-                                            </span>
+                                            <span>Eingecheckt {{ $currentCheckin->checked_in_at->format('H:i') }} Uhr</span>
+                                        
                                         @elseif ($isHardBlocked)
-                                            <button type="button" disabled
-                                                class="inline-flex items-center justify-center border border-gray-200
-                                                       bg-gray-100 text-gray-400 rounded-lg px-3 py-2 text-sm font-semibold
-                                                       cursor-not-allowed">
-                                                Check-in
-                                            </button>
-                                        @elseif ($isNeedsModal)
-                                            {{-- Orange ohne aktive Kulanz → Modal --}}
-                                            <form id="checkin-form-{{ $registration->id }}"
-                                                  method="POST"
-                                                  action="{{ route('staff.checkin', $registration) }}"
-                                                  class="hidden">
+                                            <button disabled class="w-full inline-flex items-center justify-center border border-gray-200
+                                                                   bg-gray-100 text-gray-400 rounded-lg px-3 py-2 text-sm font-semibold
+                                                                   cursor-not-allowed min-h-[44px]">
+                                               Check-in
+                                           </button>
+                                        
+                                        @elseif ($requiresModal)
+                                            {{-- Verstecktes Formular --}}
+                                            <form id="checkin-form-{{ $registration->id }}" method="POST"
+                                                  action="{{ route('staff.checkin', $registration) }}" class="hidden">
                                                 @csrf
                                                 <input type="text" name="reason" id="reason-{{ $registration->id }}">
                                             </form>
                                             <button type="button"
-                                                onclick="openOrangeCheckin(
+                                                onclick="openCheckinModal(
                                                     document.getElementById('checkin-form-{{ $registration->id }}'),
                                                     document.getElementById('reason-{{ $registration->id }}'),
                                                     '{{ e($registration->first_name . ' ' . $registration->last_name) }}',
-                                                    '{{ e($registration->access_reason ?? 'Kein Grund angegeben') }}',
-                                                    {{ $isTrialLimitReached ? 'true' : 'false' }}
+                                                    '{{ e($registration->access_reason ?? '') }}',
+                                                    '{{ $registration->access_status }}',
+                                                    {{ $nextCheckinTriggersRed ? 'true' : 'false' }},
+                                                    {{ $visits }},
+                                                    '{{ $lastCheckin ? $lastCheckin->checked_in_at->format('d.m.Y H:i') : '' }}'
                                                 )"
-                                                class="inline-flex items-center justify-center border border-transparent
+                                                class="w-full inline-flex items-center justify-center border border-transparent
                                                        bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold
-                                                       hover:bg-indigo-700 transition">
+                                                       hover:bg-indigo-700 transition min-h-[44px] touch-manipulation">
                                                 Check-in
                                             </button>
+                                        
                                         @else
                                             <form method="POST" action="{{ route('staff.checkin', $registration) }}">
                                                 @csrf
-                                                <button type="submit"
-                                                    class="inline-flex items-center justify-center border border-transparent
-                                                           bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold
-                                                           hover:bg-indigo-700 transition">
-                                                    Check-in
+                                                <button type="submit" class="w-full inline-flex items-center justify-center border border-transparent
+                                        	                                   bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold
+                                        	                                   hover:bg-indigo-700 transition min-h-[44px] touch-manipulation">
+                                                   Check-in
                                                 </button>
                                             </form>
                                         @endif
                                     </td>
-
                                 </tr>
                             @empty
                                 <tr>
