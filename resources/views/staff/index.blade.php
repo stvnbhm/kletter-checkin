@@ -556,7 +556,7 @@
 
                     {{-- Orange-Hinweis (nur im Orange-Modus sichtbar) --}}
                     <div id="confirmOrangeHint" class="hidden rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
-                        <span class="font-semibold block mb-1">⚠️ Grund für Orange-Status:</span>
+                        <span class="font-semibold block mb-1">Grund für Status Orange:</span>
                         <span id="confirmOrangeReason" class="block text-amber-700"></span>
                     </div>
 
@@ -566,7 +566,6 @@
                             Kulanzgrund <span id="confirmKulanzOptional" class="font-normal normal-case text-gray-400">(optional)</span>
                         </label>
                         <input type="text" id="confirmKulanzInput"
-                            placeholder="z. B. Ausnahme genehmigt von …"
                             class="block w-full border border-gray-300 rounded-lg px-3 py-2 text-sm
                                    bg-white text-gray-900 focus:border-indigo-500 focus:ring-indigo-500">
                     </div>
@@ -624,11 +623,11 @@
         orangeReasonInput = reasonInput;
         isModalKulanzRequired = !!isTrialLimit;
         const label = isTrialLimit
-            ? '⚠️ ' + name + ' hat das Schnupperlimit erreicht. Trotzdem einchecken?'
-            : '⚠️ ' + name + ' hat Status Orange. Trotzdem einchecken?';
+            ? name + ' war bereits Schnuppern. Trotzdem einchecken?'
+            : name + ' hat Status Orange. Trotzdem einchecken?';
         document.getElementById('confirmModalText').textContent = label;
         // Orange-Felder einblenden
-        const reasonLabel = isTrialLimit ? 'Schnupperlimit-Grund:' : 'Grund für Orange-Status:';
+        const reasonLabel = isTrialLimit ? 'Schnupperlimit-Grund:' : 'Grund für Status Orange:';
         document.querySelector('#confirmOrangeHint span.font-semibold').textContent = '⚠️ ' + reasonLabel;
         document.getElementById('confirmOrangeReason').textContent = reason || (isTrialLimit ? 'Schnuppergast hat bereits einen Besuch absolviert.' : 'Kein Grund angegeben');
         document.getElementById('confirmOrangeHint').classList.remove('hidden');

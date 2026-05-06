@@ -42,47 +42,44 @@ class StaffController extends Controller
         return view('staff.index', compact('registrations', 'query', 'stats'));
     }
 
-    public function checkin(Request $request, Registration $registration)
+    public function checkin(Registration $registration)
     {
         $registration->load('currentCheckin', 'member');
     
         if ($registration->access_status === 'red') {
-            return redirect()
-                ->route('staff')
+            return redirect()->route('staff')
                 ->with('error', 'Check-in verweigert – Kein Zutritt erlaubt.');
         }
     
         if ($registration->currentCheckin) {
-            return redirect()
-                ->route('staff')
+            return redirect()->route('staff')
                 ->with('error', 'Diese Person ist bereits eingecheckt.');
         }
     
-        // Orange: Kulanzgrund ist Pflicht (Staff hat via Modal bestätigt)
-        if ($registration->access_status === 'orange') {
-            $request->validate([
-                'reason' => ['required', 'string', 'max:255'],
-            ], [
-                'reason.required' => 'Bei Status Orange ist ein Kulanzgrund erforderlich.',
-            ]);
-    
-            $reason = strip_tags($request->input('reason'));
-    
+        // ✅ FIX: Kulanzgrund wurde mitgeschickt → Kulanz SOFORT setzen,
+        //         BEVOR die Schnuppergast-Sperre greift
+        $reason = strip_tags(request('reason', ''));
+        if ($reason) {
             $registration->update([
                 'manual_exception_reason' => $reason,
                 'manual_exception_until'  => now()->endOfDay(),
                 'access_reason'           => 'Kulanz: ' . $reason,
             ]);
-            // kein return → fällt durch zur normalen Check-in-Logik
+            // Relation neu laden damit isFuture() unten korrekt funktioniert
+            $registration->refresh();
         }
     
-        // Schnuppergast-Limit (Sicherheitsnetz — orange wurde oben bereits behandelt)
+        // Orange-Status protokollieren (für den orange-Modal-Flow)
+        if ($registration->access_status === 'orange' && $reason) {
+            $registration->update(['access_reason' => 'Orange-Checkin: ' . $reason]);
+            $registration->refresh();
+        }
+    
+        // Schnuppergast-Limit-Prüfung (greift jetzt NICHT mehr, wenn Kulanz gesetzt)
         if ($registration->member_type === 'guest' && $registration->trial_visits_count >= 1) {
             $hasActiveKulanz = $registration->manual_exception_until?->isFuture();
-    
-            if (! $hasActiveKulanz && $registration->access_status !== 'orange') {
-                return redirect()
-                    ->route('staff')
+            if (! $hasActiveKulanz) {
+                return redirect()->route('staff')
                     ->with('error', 'Check-in verweigert – Schnuppergast hat den Erstbesuch bereits absolviert. Bitte Kulanz gewähren.');
             }
         }
