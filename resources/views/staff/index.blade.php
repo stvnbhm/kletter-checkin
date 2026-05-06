@@ -603,37 +603,40 @@
         document.body.classList.add('overflow-hidden');
     }
 
-    function openOrangeCheckin(form, reasonInput, name, reason, isTrialLimit) {
+    function openCheckinModal(form, reasonInput, name, reason, accessStatus, nextTriggersRed, visits, lastCheckin) {
+        const isTrialLimit = (accessStatus !== 'orange'); // Schnupperlimit-Modus wenn NICHT orange
         confirmForm = form;
         orangeReasonInput = reasonInput;
         isModalKulanzRequired = !!isTrialLimit;
+        
         const label = isTrialLimit
             ? name + ' war bereits Schnuppern. Trotzdem einchecken?'
             : name + ' hat Status Orange. Trotzdem einchecken?';
         document.getElementById('confirmModalText').textContent = label;
-        // Orange-Felder einblenden
+        
         const reasonLabel = isTrialLimit ? 'Schnupperlimit-Grund:' : 'Grund für Status Orange:';
         document.querySelector('#confirmOrangeHint span.font-semibold').textContent = '⚠️ ' + reasonLabel;
-        document.getElementById('confirmOrangeReason').textContent = reason || (isTrialLimit ? 'Schnuppergast hat bereits einen Besuch absolviert.' : 'Kein Grund angegeben');
+        document.getElementById('confirmOrangeReason').textContent = reason
+            || (isTrialLimit ? 'Schnuppergast hat bereits einen Besuch absolviert.' : 'Kein Grund angegeben');
         document.getElementById('confirmOrangeHint').classList.remove('hidden');
         document.getElementById('confirmOrangeKulanz').classList.remove('hidden');
         document.getElementById('confirmKulanzInput').value = '';
         document.getElementById('confirmKulanzInput').classList.remove('border-red-500');
-        // Kulanzfeld: optional/pflicht je nach Modus
         document.getElementById('confirmKulanzOptional').textContent = isTrialLimit ? '(Pflicht)' : '(optional)';
-        // Button: indigo "Check-in"-Stil
+        
         const okBtn = document.getElementById('confirmOkBtn');
         okBtn.disabled = false;
         okBtn.textContent = 'Trotzdem Check-in';
         okBtn.classList.remove('bg-red-600', 'hover:bg-red-700');
         okBtn.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
+        
         const modal = document.getElementById('confirmModal');
         modal.classList.remove('hidden');
         modal.setAttribute('aria-hidden', 'false');
         document.body.classList.add('overflow-hidden');
         setTimeout(() => document.getElementById('confirmKulanzInput').focus(), 50);
     }
-
+    
     function closeConfirmModal() {
         const modal = document.getElementById('confirmModal');
         modal.classList.add('hidden');
