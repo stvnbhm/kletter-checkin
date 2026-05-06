@@ -108,6 +108,14 @@ class StaffController extends Controller
         ]);
     
         $registration->increment('trial_visits_count');
+        
+        // Schnuppergast: access_reason mit Checkin-Zeitpunkt aktualisieren
+        if ($registration->member_type === 'guest') {
+            $registration->update([
+                'access_reason' => 'Schnupperklettern: Letzter Besuch am ' 
+                    . now()->format('d.m.Y \u\m H:i') . ' Uhr',
+            ]);
+        }
     
         // Nach Check-in prüfen ob Limit jetzt erreicht
         if ($isUnverifiedMember) {
@@ -149,6 +157,7 @@ class StaffController extends Controller
         /**
      * Kulanz erteilen UND sofort Check-in durchführen (für orange-Status).
      */
+     
     public function kulanzCheckin(Request $request, Registration $registration): RedirectResponse
     {
         $request->validate([
@@ -194,12 +203,12 @@ class StaffController extends Controller
     
         foreach ($openCheckins as $checkin) {
             $checkin->update(['checked_out_at' => $now]);
-        
+    
             $registration = Registration::find($checkin->registration_id);
             if (!$registration) continue;
-        
+    
             $registration->update(['checked_in_at' => null]);
-        
+    
             // Schnuppergast: nach 3 Besuchen → red
             if ($registration->member_type === 'guest'
                 && $registration->trial_visits_count >= 3) {
@@ -207,12 +216,19 @@ class StaffController extends Controller
                     'access_status' => 'red',
                     'access_reason' => 'Schnupperlimit ausgeschöpft (3/3)',
                 ]);
+            // Schnuppergast: noch Besuche übrig → Timestamp des letzten Besuchs speichern
+            } elseif ($registration->member_type === 'guest'
+                && $registration->trial_visits_count >= 1) {
+                $registration->update([
+                    'access_reason' => 'Schnupperklettern: Letzter Besuch am '
+                        . $checkin->checked_in_at->format('d.m.Y \u\m H:i') . ' Uhr',
+                ]);
             }
-        
-            // NEU: Unverified Member: nach 3 Besuchen → red
+    
+            // Unverified Member: nach 3 Besuchen → red
             $isUnverifiedMember = $registration->member_type === 'member'
                                   && $registration->member === null;
-        
+    
             if ($isUnverifiedMember && $registration->trial_visits_count >= 3) {
                 $registration->update([
                     'access_status' => 'red',

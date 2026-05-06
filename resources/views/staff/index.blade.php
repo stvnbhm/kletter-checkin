@@ -197,10 +197,11 @@
                                         && !$hasActiveKulanz)
                                         || $isTrialLimitReached;
 
-                        $kulanzHint = match (true) {
+                        $kulanzHint = match(true) {
                             $registration->access_status === 'red' => 'Person gesperrt',
-                            $isTrialLimitReached                   => 'Schnupperlimit erreicht (' . $visits . ')',
-                            default                                => 'Aktion erforderlich',
+                            $isTrialLimitReached => $registration->access_reason 
+                                ?? ('Schnupperlimit erreicht (' . $visits . ')'),
+                            default => 'Aktion erforderlich',
                         };
                         $hintIcon  = $registration->access_status === 'red' ? '🚫' : '⚠️';
                         $hintColor = $registration->access_status === 'red' ? 'text-red-600' : 'text-amber-600';
@@ -381,10 +382,11 @@
                                                     && !$hasActiveKulanz)
                                         || $isTrialLimitReached;
 
-                                    $kulanzHint = match (true) {
+                                    $kulanzHint = match(true) {
                                         $registration->access_status === 'red' => 'Person gesperrt',
-                                        $isTrialLimitReached                   => 'Schnupperlimit erreicht (' . $visits . ')',
-                                        default                                => 'Aktion erforderlich',
+                                        $isTrialLimitReached => $registration->access_reason 
+                                            ?? ('Schnupperlimit erreicht (' . $visits . ')'),
+                                        default => 'Aktion erforderlich',
                                     };
                                     $hintIcon  = $registration->access_status === 'red' ? '🚫' : '⚠️';
                                     $hintColor = $registration->access_status === 'red' ? 'text-red-600' : 'text-amber-600';
