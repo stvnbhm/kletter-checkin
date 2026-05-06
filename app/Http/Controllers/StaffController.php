@@ -44,12 +44,12 @@ class StaffController extends Controller
 
     public function checkin(Registration $registration)
     {
-        $registration->load('currentCheckin', 'member'); // ← 'member' neu laden
+        $registration->load('currentCheckin', 'member'); // member neu laden
     
-        if ($registration->access_status === 'red') {
+        if ($registration->accessstatus === 'red') {
             return redirect()
                 ->route('staff')
-                ->with('error', 'Check-in verweigert: Kein Zutritt erlaubt.');
+                ->with('error', 'Check-in verweigert – Kein Zutritt erlaubt.');
         }
     
         if ($registration->currentCheckin) {
@@ -58,15 +58,23 @@ class StaffController extends Controller
                 ->with('error', 'Diese Person ist bereits eingecheckt.');
         }
     
-        // Schnuppergast-Limit
-        if ($registration->member_type === 'guest' && $registration->trial_visits_count >= 1) {
-            $hasActiveKulanz = $registration->manual_exception_until
-                && $registration->manual_exception_until->isFuture();
+        // Orange: Check-in erlaubt (Staff hat via Modal bestätigt), Grund protokollieren
+        if ($registration->accessstatus === 'orange') {
+            $reason = strip_tags(request('reason', ''));
+            if ($reason) {
+                $registration->update(['accessreason' => 'Orange-Checkin: ' . $reason]);
+            }
+            // kein return → fällt durch zur normalen Check-in-Logik
+        }
     
-            if (! $hasActiveKulanz) {
+        // Schnuppergast-Limit: nur noch als Sicherheitsnetz im Controller,
+        // da der Blade-Button bei orange bereits das Modal erzwingt
+        if ($registration->membertype === 'guest' && $registration->trial_visits_count >= 1) {
+            $hasActiveKulanz = $registration->manual_exception_until?->isFuture();
+            if (! $hasActiveKulanz && $registration->accessstatus !== 'orange') {
                 return redirect()
                     ->route('staff')
-                    ->with('error', 'Check-in verweigert: Schnuppergast hat den Erstbesuch bereits absolviert. Bitte Kulanz gewähren.');
+                    ->with('error', 'Check-in verweigert – Schnuppergast hat den Erstbesuch bereits absolviert. Bitte Kulanz gewähren.');
             }
         }
     

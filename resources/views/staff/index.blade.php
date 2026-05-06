@@ -193,9 +193,12 @@
                                       || $isUnverifiedMemberBlocked
                                       || $registration->access_status === 'red';
 
-                        $needsKulanz = $registration->access_status === 'orange'
-                                    && !$hasActiveKulanz
-                                    && !$isTrialLimitReached;
+                        $needsKulanz    = $registration->accessstatus === 'orange' 
+                            && !$hasActiveKulanz 
+                            && !$isTrialLimitReached;
+                            
+                        $isOrangePending = $registration->accessstatus === 'orange' 
+                            && !$hasActiveKulanz;
 
                         $kulanzHint = match (true) {
                             $registration->access_status === 'red' => 'Person gesperrt',
@@ -285,46 +288,43 @@
 
                         {{-- Aktion --}}
                         <div class="border-t border-gray-100 pt-3">
-                            @if ($currentCheckin)
-                                <span class="text-sm text-gray-500">
-                                    Eingecheckt {{ $currentCheckin->checked_in_at->format('H:i') }} Uhr
-                                </span>
-                            @elseif ($isHardBlocked)
+                            @if($currentCheckin)
+                                <span class="text-sm text-gray-500">Eingecheckt {{ $currentCheckin->checkedinat->format('H:i') }} Uhr</span>
+                            @elseif($isHardBlocked)
                                 <button type="button" disabled
-                                    class="w-full inline-flex items-center justify-center border border-gray-200
-                                           bg-gray-100 text-gray-400 rounded-lg px-3 py-2 text-sm font-semibold
-                                           cursor-not-allowed min-h-[44px]">
+                                    class="w-full inline-flex items-center justify-center border border-gray-200 bg-gray-100 text-gray-400 rounded-lg px-3 py-2 text-sm font-semibold cursor-not-allowed min-h-[44px]">
                                     Check-in
                                 </button>
-                            @elseif ($needsKulanz)
-                                <form method="POST"
-                                      action="{{ route('staff.kulanz-checkin', $registration) }}"
-                                      class="flex flex-col gap-2">
+                            @elseif($isOrangePending)
+                                {{-- Orange ohne aktive Kulanz → Modal --}}
+                                <form id="checkin-form-mob-{{ $registration->id }}"
+                                      method="POST"
+                                      action="{{ route('staff.checkin', $registration) }}"
+                                      class="hidden">
                                     @csrf
-                                    <span class="text-xs font-semibold {{ $hintColor }}">
-                                        {{ $hintIcon }} {{ $kulanzHint }}
-                                    </span>
-                                    <input type="text" name="reason" placeholder="Kulanzgrund" required
-                                        class="block w-full border border-gray-300 rounded-md px-3 py-2 text-sm
-                                               bg-white text-gray-900 focus:border-amber-500 focus:ring-amber-500">
-                                    <button type="submit"
-                                        class="self-start text-xs font-semibold text-amber-700 underline
-                                               bg-transparent border-none p-0 cursor-pointer hover:text-amber-900">
-                                        Checkin mit Kulanz
-                                    </button>
+                                    <input type="text" name="reason" id="reason-mob-{{ $registration->id }}">
                                 </form>
+                                <button type="button"
+                                    onclick="openOrangeCheckin(
+                                        document.getElementById('checkin-form-mob-{{ $registration->id }}'),
+                                        document.getElementById('reason-mob-{{ $registration->id }}'),
+                                        '{{ e($registration->firstname . ' ' . $registration->lastname) }}',
+                                        '{{ e($registration->accessreason ?? 'Kein Grund angegeben') }}'
+                                    )"
+                                    class="w-full inline-flex items-center justify-center border border-transparent bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-indigo-700 transition min-h-[44px] touch-manipulation">
+                                    Check-in
+                                </button>
                             @else
                                 <form method="POST" action="{{ route('staff.checkin', $registration) }}">
                                     @csrf
                                     <button type="submit"
-                                        class="w-full inline-flex items-center justify-center border border-transparent
-                                               bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold
-                                               hover:bg-indigo-700 transition min-h-[44px] touch-manipulation">
+                                        class="w-full inline-flex items-center justify-center border border-transparent bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-indigo-700 transition min-h-[44px] touch-manipulation">
                                         Check-in
                                     </button>
                                 </form>
                             @endif
                         </div>
+                        
                     </div>
                 @empty
                     <div class="bg-white border border-gray-200 rounded-xl p-6 text-center text-sm text-gray-500 shadow-sm">
@@ -371,9 +371,12 @@
                                                   || $isUnverifiedMemberBlocked
                                                   || $registration->access_status === 'red';
 
-                                    $needsKulanz = $registration->access_status === 'orange'
-                                                && !$hasActiveKulanz
-                                                && !$isTrialLimitReached;
+                                    $needsKulanz    = $registration->accessstatus === 'orange' 
+                                        && !$hasActiveKulanz 
+                                        && !$isTrialLimitReached;
+                                        
+                                    $isOrangePending = $registration->accessstatus === 'orange' 
+                                        && !$hasActiveKulanz;
 
                                     $kulanzHint = match (true) {
                                         $registration->access_status === 'red' => 'Person gesperrt',
@@ -467,48 +470,39 @@
                                         @endif
                                     </td>
 
-                                    {{-- CHECK-IN / AKTION --}}
+                                    {{-- CHECK-IN AKTION --}}
                                     <td class="px-4 py-4 align-top">
-                                        @if ($currentCheckin)
-                                            <span class="text-sm text-gray-500">
-                                                Eingecheckt {{ $currentCheckin->checked_in_at->format('H:i') }} Uhr
-                                            </span>
-                                        @elseif ($isHardBlocked)
+                                        @if($currentCheckin)
+                                            <span class="text-sm text-gray-500">Eingecheckt {{ $currentCheckin->checkedinat->format('H:i') }} Uhr</span>
+                                        @elseif($isHardBlocked)
                                             <button type="button" disabled
-                                                class="inline-flex items-center justify-center border border-gray-200
-                                                       bg-gray-100 text-gray-400 rounded-lg px-3 py-2 text-sm
-                                                       font-semibold cursor-not-allowed">
+                                                class="inline-flex items-center justify-center border border-gray-200 bg-gray-100 text-gray-400 rounded-lg px-3 py-2 text-sm font-semibold cursor-not-allowed">
                                                 Check-in
                                             </button>
-                                        @elseif ($needsKulanz)
-                                            <div class="flex flex-col gap-1.5">
-                                                <span class="text-xs font-semibold {{ $hintColor }}">
-                                                    {{ $hintIcon }} {{ $kulanzHint }}
-                                                </span>
-                                                <form method="POST"
-                                                      action="{{ route('staff.kulanz-checkin', $registration) }}"
-                                                      class="flex flex-col gap-1.5">
-                                                    @csrf
-                                                    <input type="text" name="reason"
-                                                        placeholder="Grund für Kulanz …" required
-                                                        class="block w-full max-w-[180px] border border-gray-300
-                                                               rounded-md px-2 py-1.5 text-xs bg-white text-gray-900
-                                                               focus:border-amber-500 focus:ring-amber-500">
-                                                    <button type="submit"
-                                                        class="self-start text-xs font-semibold text-amber-700 underline
-                                                               bg-transparent border-none p-0 cursor-pointer
-                                                               hover:text-amber-900">
-                                                        Checkin mit Kulanz
-                                                    </button>
-                                                </form>
-                                            </div>
+                                        @elseif($isOrangePending)
+                                            {{-- Orange ohne aktive Kulanz → Modal --}}
+                                            <form id="checkin-form-{{ $registration->id }}"
+                                                  method="POST"
+                                                  action="{{ route('staff.checkin', $registration) }}"
+                                                  class="hidden">
+                                                @csrf
+                                                <input type="text" name="reason" id="reason-{{ $registration->id }}">
+                                            </form>
+                                            <button type="button"
+                                                onclick="openOrangeCheckin(
+                                                    document.getElementById('checkin-form-{{ $registration->id }}'),
+                                                    document.getElementById('reason-{{ $registration->id }}'),
+                                                    '{{ e($registration->firstname . ' ' . $registration->lastname) }}',
+                                                    '{{ e($registration->accessreason ?? 'Kein Grund angegeben') }}'
+                                                )"
+                                                class="inline-flex items-center justify-center border border-transparent bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-indigo-700 transition">
+                                                Check-in
+                                            </button>
                                         @else
                                             <form method="POST" action="{{ route('staff.checkin', $registration) }}">
                                                 @csrf
                                                 <button type="submit"
-                                                    class="inline-flex items-center justify-center border border-transparent
-                                                           bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm
-                                                           font-semibold hover:bg-indigo-700 transition">
+                                                    class="inline-flex items-center justify-center border border-transparent bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-indigo-700 transition">
                                                     Check-in
                                                 </button>
                                             </form>
@@ -545,8 +539,24 @@
                 <div class="px-5 py-4 border-b border-gray-100">
                     <h3 class="text-base font-semibold text-gray-900">Bitte bestätigen</h3>
                 </div>
-                <div class="px-5 py-4">
+                <div class="px-5 py-4 flex flex-col gap-3">
                     <p id="confirmModalText" class="text-sm text-gray-600 leading-relaxed"></p>
+                
+                    {{-- NEU: Orange-Hinweis (nur im Orange-Modus sichtbar) --}}
+                    <div id="confirmOrangeHint" class="hidden rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
+                        <span class="font-semibold block mb-1">⚠️ Grund für Orange-Status:</span>
+                        <span id="confirmOrangeReason" class="block text-amber-700"></span>
+                    </div>
+                
+                    {{-- NEU: Kulanzfeld (nur im Orange-Modus sichtbar) --}}
+                    <div id="confirmOrangeKulanz" class="hidden">
+                        <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                            Kulanzgrund <span class="font-normal normal-case text-gray-400">(optional)</span>
+                        </label>
+                        <input type="text" id="confirmKulanzInput"
+                            placeholder="z. B. Ausnahme genehmigt von …"
+                            class="block w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-900 focus:border-indigo-500 focus:ring-indigo-500">
+                    </div>
                 </div>
                 <div class="px-5 py-4 bg-gray-50 border-t border-gray-100
                             flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
@@ -571,39 +581,85 @@
 
     {{-- ── JavaScript ──────────────────────────────────────────────────── --}}
     <script>
-    // ── Confirm Modal ──────────────────────────────────────────────────────
+    // Confirm Modal (Alle auschecken + Orange-Check-in)
     let confirmForm = null;
-
+    let orangeReasonInput = null;
+    
     function askConfirm(message, form) {
         confirmForm = form;
+        orangeReasonInput = null;
         document.getElementById('confirmModalText').textContent = message;
+        // Orange-Felder verstecken (normaler Modus)
+        document.getElementById('confirmOrangeHint').classList.add('hidden');
+        document.getElementById('confirmOrangeKulanz').classList.add('hidden');
+        // Button: roter "Auschecken"-Stil
         const okBtn = document.getElementById('confirmOkBtn');
         okBtn.disabled = false;
+        okBtn.textContent = 'Ja, auschecken';
+        okBtn.className = okBtn.className
+            .replace('bg-indigo-600', 'bg-red-600')
+            .replace('hover:bg-indigo-700', 'hover:bg-red-700');
+        if (!okBtn.className.includes('bg-red-600')) {
+            okBtn.classList.add('bg-red-600', 'hover:bg-red-700');
+        }
         const modal = document.getElementById('confirmModal');
         modal.classList.remove('hidden');
         modal.setAttribute('aria-hidden', 'false');
         document.body.classList.add('overflow-hidden');
     }
-
+    
+    function openOrangeCheckin(form, reasonInput, name, reason) {
+        confirmForm = form;
+        orangeReasonInput = reasonInput;
+        document.getElementById('confirmModalText').textContent =
+            '⚠️ ' + name + ' hat Status Orange. Trotzdem einchecken?';
+        // Orange-Felder einblenden
+        document.getElementById('confirmOrangeReason').textContent = reason;
+        document.getElementById('confirmOrangeHint').classList.remove('hidden');
+        document.getElementById('confirmOrangeKulanz').classList.remove('hidden');
+        document.getElementById('confirmKulanzInput').value = '';
+        // Button: indigo "Check-in"-Stil
+        const okBtn = document.getElementById('confirmOkBtn');
+        okBtn.disabled = false;
+        okBtn.textContent = 'Trotzdem Check-in';
+        okBtn.classList.remove('bg-red-600', 'hover:bg-red-700');
+        okBtn.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
+        const modal = document.getElementById('confirmModal');
+        modal.classList.remove('hidden');
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('overflow-hidden');
+    }
+    
     function closeConfirmModal() {
         const modal = document.getElementById('confirmModal');
         modal.classList.add('hidden');
         modal.setAttribute('aria-hidden', 'true');
         document.body.classList.remove('overflow-hidden');
         confirmForm = null;
+        orangeReasonInput = null;
+        // Felder zurücksetzen
+        document.getElementById('confirmOrangeHint').classList.add('hidden');
+        document.getElementById('confirmOrangeKulanz').classList.add('hidden');
+        // Button zurück auf rot
+        const okBtn = document.getElementById('confirmOkBtn');
+        okBtn.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
+        okBtn.classList.add('bg-red-600', 'hover:bg-red-700');
+        okBtn.textContent = 'Ja, auschecken';
     }
-
+    
     document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('confirmOkBtn')?.addEventListener('click', function () {
             if (!confirmForm) return;
             this.disabled = true;
+            // Kulanzwert in verstecktes Formular-Input schreiben
+            if (orangeReasonInput) {
+                orangeReasonInput.value = document.getElementById('confirmKulanzInput').value;
+            }
             confirmForm.submit();
         });
-
         document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape') closeConfirmModal();
         });
-    });
 
     // ── QR-Scanner ─────────────────────────────────────────────────────────
     let html5QrCode   = null;
