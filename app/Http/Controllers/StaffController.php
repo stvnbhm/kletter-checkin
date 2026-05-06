@@ -42,11 +42,11 @@ class StaffController extends Controller
         return view('staff.index', compact('registrations', 'query', 'stats'));
     }
 
-    public function checkin(Registration $registration)
+    public function checkin(Request $request, Registration $registration)
     {
-        $registration->load('currentCheckin', 'member'); // member neu laden
+        $registration->load('currentCheckin', 'member');
     
-        if ($registration->accessstatus === 'red') {
+        if ($registration->access_status === 'red') {
             return redirect()
                 ->route('staff')
                 ->with('error', 'Check-in verweigert – Kein Zutritt erlaubt.');
@@ -58,35 +58,42 @@ class StaffController extends Controller
                 ->with('error', 'Diese Person ist bereits eingecheckt.');
         }
     
-        // Orange: Check-in erlaubt (Staff hat via Modal bestätigt), Grund protokollieren
-        if ($registration->accessstatus === 'orange') {
-            $reason = strip_tags(request('reason', ''));
-            if ($reason) {
-                $registration->update(['accessreason' => 'Orange-Checkin: ' . $reason]);
-            }
+        // Orange: Kulanzgrund ist Pflicht (Staff hat via Modal bestätigt)
+        if ($registration->access_status === 'orange') {
+            $request->validate([
+                'reason' => ['required', 'string', 'max:255'],
+            ], [
+                'reason.required' => 'Bei Status Orange ist ein Kulanzgrund erforderlich.',
+            ]);
+    
+            $reason = strip_tags($request->input('reason'));
+    
+            $registration->update([
+                'manual_exception_reason' => $reason,
+                'manual_exception_until'  => now()->endOfDay(),
+                'access_reason'           => 'Kulanz: ' . $reason,
+            ]);
             // kein return → fällt durch zur normalen Check-in-Logik
         }
     
-        // Schnuppergast-Limit: nur noch als Sicherheitsnetz im Controller,
-        // da der Blade-Button bei orange bereits das Modal erzwingt
-        if ($registration->membertype === 'guest' && $registration->trial_visits_count >= 1) {
+        // Schnuppergast-Limit (Sicherheitsnetz — orange wurde oben bereits behandelt)
+        if ($registration->member_type === 'guest' && $registration->trial_visits_count >= 1) {
             $hasActiveKulanz = $registration->manual_exception_until?->isFuture();
-            if (! $hasActiveKulanz && $registration->accessstatus !== 'orange') {
+    
+            if (! $hasActiveKulanz && $registration->access_status !== 'orange') {
                 return redirect()
                     ->route('staff')
                     ->with('error', 'Check-in verweigert – Schnuppergast hat den Erstbesuch bereits absolviert. Bitte Kulanz gewähren.');
             }
         }
     
-        // ↓ NEU: Mitglied nicht in CSV → max. 3 Check-ins
-        $isUnverifiedMember = $registration->member_type === 'member'
-                              && $registration->member === null;
+        // Unverified Member: max. 3 Check-ins
+        $isUnverifiedMember = $registration->member_type === 'member' && $registration->member === null;
     
         if ($isUnverifiedMember) {
             $totalCheckins = Checkin::where('registration_id', $registration->id)->count();
     
             if ($totalCheckins >= 3) {
-                // Sicherheitsnetz: Status auf red setzen falls noch nicht geschehen
                 $registration->update([
                     'access_status' => 'red',
                     'access_reason' => 'Mitgliedsnummer nicht im System – Limit erreicht',
@@ -94,7 +101,7 @@ class StaffController extends Controller
     
                 return redirect()
                     ->route('staff')
-                    ->with('error', 'Check-in verweigert: Mitgliedsnummer nicht im Mitgliedersystem. Limit von 3 Besuchen ausgeschöpft.');
+                    ->with('error', 'Check-in verweigert – Mitgliedsnummer nicht im Mitgliedersystem. Limit von 3 Besuchen ausgeschöpft.');
             }
         }
     
@@ -105,7 +112,7 @@ class StaffController extends Controller
     
         $registration->increment('trial_visits_count');
     
-        // ↓ NEU: Nach dem Check-in prüfen ob Limit jetzt erreicht
+        // Nach Check-in prüfen ob Limit jetzt erreicht
         if ($isUnverifiedMember) {
             $totalCheckins = Checkin::where('registration_id', $registration->id)->count();
     
@@ -119,7 +126,7 @@ class StaffController extends Controller
     
         return redirect()
             ->route('staff')
-            ->withSuccess($registration->first_name . ' ' . $registration->last_name . ' wurde erfolgreich eingecheckt.');
+            ->with('success', $registration->first_name . ' ' . $registration->last_name . ' wurde erfolgreich eingecheckt.');
     }
 
     public function grantKulanz(Request $request, Registration $registration)

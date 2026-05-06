@@ -189,16 +189,12 @@
                                                      && $visits >= 1 && $visits < 3
                                                      && !$hasActiveKulanz;
 
-                        $isHardBlocked = $isTrialMaxReached
-                                      || $isUnverifiedMemberBlocked
-                                      || $registration->access_status === 'red';
+                        $isHardBlocked   = $isTrialMaxReached
+                                        || $isUnverifiedMemberBlocked
+                                        || $registration->access_status === 'red';
 
-                        $needsKulanz    = $registration->accessstatus === 'orange' 
-                            && !$hasActiveKulanz 
-                            && !$isTrialLimitReached;
-                            
-                        $isOrangePending = $registration->accessstatus === 'orange' 
-                            && !$hasActiveKulanz;
+                        $isOrangePending = $registration->access_status === 'orange'
+                                        && !$hasActiveKulanz;
 
                         $kulanzHint = match (true) {
                             $registration->access_status === 'red' => 'Person gesperrt',
@@ -286,16 +282,20 @@
                             </div>
                         @endif
 
-                        {{-- Aktion --}}
+                        {{-- ── Aktion (Mobile) ──────────────────────────────── --}}
                         <div class="border-t border-gray-100 pt-3">
-                            @if($currentCheckin)
-                                <span class="text-sm text-gray-500">Eingecheckt {{ $currentCheckin->checked_in_at->format('H:i') }} Uhr</span>
-                            @elseif($isHardBlocked)
+                            @if ($currentCheckin)
+                                <span class="text-sm text-gray-500">
+                                    Eingecheckt {{ $currentCheckin->checked_in_at->format('H:i') }} Uhr
+                                </span>
+                            @elseif ($isHardBlocked)
                                 <button type="button" disabled
-                                    class="w-full inline-flex items-center justify-center border border-gray-200 bg-gray-100 text-gray-400 rounded-lg px-3 py-2 text-sm font-semibold cursor-not-allowed min-h-[44px]">
+                                    class="w-full inline-flex items-center justify-center border border-gray-200
+                                           bg-gray-100 text-gray-400 rounded-lg px-3 py-2 text-sm font-semibold
+                                           cursor-not-allowed min-h-[44px]">
                                     Check-in
                                 </button>
-                            @elseif($isOrangePending)
+                            @elseif ($isOrangePending)
                                 {{-- Orange ohne aktive Kulanz → Modal --}}
                                 <form id="checkin-form-mob-{{ $registration->id }}"
                                       method="POST"
@@ -308,23 +308,27 @@
                                     onclick="openOrangeCheckin(
                                         document.getElementById('checkin-form-mob-{{ $registration->id }}'),
                                         document.getElementById('reason-mob-{{ $registration->id }}'),
-                                        '{{ e($registration->firstname . ' ' . $registration->lastname) }}',
-                                        '{{ e($registration->accessreason ?? 'Kein Grund angegeben') }}'
+                                        '{{ e($registration->first_name . ' ' . $registration->last_name) }}',
+                                        '{{ e($registration->access_reason ?? 'Kein Grund angegeben') }}'
                                     )"
-                                    class="w-full inline-flex items-center justify-center border border-transparent bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-indigo-700 transition min-h-[44px] touch-manipulation">
+                                    class="w-full inline-flex items-center justify-center border border-transparent
+                                           bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold
+                                           hover:bg-indigo-700 transition min-h-[44px] touch-manipulation">
                                     Check-in
                                 </button>
                             @else
                                 <form method="POST" action="{{ route('staff.checkin', $registration) }}">
                                     @csrf
                                     <button type="submit"
-                                        class="w-full inline-flex items-center justify-center border border-transparent bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-indigo-700 transition min-h-[44px] touch-manipulation">
+                                        class="w-full inline-flex items-center justify-center border border-transparent
+                                               bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold
+                                               hover:bg-indigo-700 transition min-h-[44px] touch-manipulation">
                                         Check-in
                                     </button>
                                 </form>
                             @endif
                         </div>
-                        
+
                     </div>
                 @empty
                     <div class="bg-white border border-gray-200 rounded-xl p-6 text-center text-sm text-gray-500 shadow-sm">
@@ -367,16 +371,12 @@
                                                                  && $visits >= 1 && $visits < 3
                                                                  && !$hasActiveKulanz;
 
-                                    $isHardBlocked = $isTrialMaxReached
-                                                  || $isUnverifiedMemberBlocked
-                                                  || $registration->access_status === 'red';
+                                    $isHardBlocked   = $isTrialMaxReached
+                                                    || $isUnverifiedMemberBlocked
+                                                    || $registration->access_status === 'red';
 
-                                    $needsKulanz    = $registration->accessstatus === 'orange' 
-                                        && !$hasActiveKulanz 
-                                        && !$isTrialLimitReached;
-                                        
-                                    $isOrangePending = $registration->accessstatus === 'orange' 
-                                        && !$hasActiveKulanz;
+                                    $isOrangePending = $registration->access_status === 'orange'
+                                                    && !$hasActiveKulanz;
 
                                     $kulanzHint = match (true) {
                                         $registration->access_status === 'red' => 'Person gesperrt',
@@ -470,16 +470,20 @@
                                         @endif
                                     </td>
 
-                                    {{-- CHECK-IN AKTION --}}
+                                    {{-- ── CHECK-IN AKTION (Desktop) ──────────────── --}}
                                     <td class="px-4 py-4 align-top">
-                                        @if($currentCheckin)
-                                            <span class="text-sm text-gray-500">Eingecheckt {{ $currentCheckin->checked_in_at->format('H:i') }} Uhr</span>
-                                        @elseif($isHardBlocked)
+                                        @if ($currentCheckin)
+                                            <span class="text-sm text-gray-500">
+                                                Eingecheckt {{ $currentCheckin->checked_in_at->format('H:i') }} Uhr
+                                            </span>
+                                        @elseif ($isHardBlocked)
                                             <button type="button" disabled
-                                                class="inline-flex items-center justify-center border border-gray-200 bg-gray-100 text-gray-400 rounded-lg px-3 py-2 text-sm font-semibold cursor-not-allowed">
+                                                class="inline-flex items-center justify-center border border-gray-200
+                                                       bg-gray-100 text-gray-400 rounded-lg px-3 py-2 text-sm font-semibold
+                                                       cursor-not-allowed">
                                                 Check-in
                                             </button>
-                                        @elseif($isOrangePending)
+                                        @elseif ($isOrangePending)
                                             {{-- Orange ohne aktive Kulanz → Modal --}}
                                             <form id="checkin-form-{{ $registration->id }}"
                                                   method="POST"
@@ -492,17 +496,21 @@
                                                 onclick="openOrangeCheckin(
                                                     document.getElementById('checkin-form-{{ $registration->id }}'),
                                                     document.getElementById('reason-{{ $registration->id }}'),
-                                                    '{{ e($registration->firstname . ' ' . $registration->lastname) }}',
-                                                    '{{ e($registration->accessreason ?? 'Kein Grund angegeben') }}'
+                                                    '{{ e($registration->first_name . ' ' . $registration->last_name) }}',
+                                                    '{{ e($registration->access_reason ?? 'Kein Grund angegeben') }}'
                                                 )"
-                                                class="inline-flex items-center justify-center border border-transparent bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-indigo-700 transition">
+                                                class="inline-flex items-center justify-center border border-transparent
+                                                       bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold
+                                                       hover:bg-indigo-700 transition">
                                                 Check-in
                                             </button>
                                         @else
                                             <form method="POST" action="{{ route('staff.checkin', $registration) }}">
                                                 @csrf
                                                 <button type="submit"
-                                                    class="inline-flex items-center justify-center border border-transparent bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold hover:bg-indigo-700 transition">
+                                                    class="inline-flex items-center justify-center border border-transparent
+                                                           bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold
+                                                           hover:bg-indigo-700 transition">
                                                     Check-in
                                                 </button>
                                             </form>
@@ -541,21 +549,22 @@
                 </div>
                 <div class="px-5 py-4 flex flex-col gap-3">
                     <p id="confirmModalText" class="text-sm text-gray-600 leading-relaxed"></p>
-                
-                    {{-- NEU: Orange-Hinweis (nur im Orange-Modus sichtbar) --}}
+
+                    {{-- Orange-Hinweis (nur im Orange-Modus sichtbar) --}}
                     <div id="confirmOrangeHint" class="hidden rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
                         <span class="font-semibold block mb-1">⚠️ Grund für Orange-Status:</span>
                         <span id="confirmOrangeReason" class="block text-amber-700"></span>
                     </div>
-                
-                    {{-- NEU: Kulanzfeld (nur im Orange-Modus sichtbar) --}}
+
+                    {{-- Kulanzfeld (nur im Orange-Modus sichtbar) --}}
                     <div id="confirmOrangeKulanz" class="hidden">
-                        <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        <label for="confirmKulanzInput" class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
                             Kulanzgrund <span class="font-normal normal-case text-gray-400">(optional)</span>
                         </label>
                         <input type="text" id="confirmKulanzInput"
                             placeholder="z. B. Ausnahme genehmigt von …"
-                            class="block w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-900 focus:border-indigo-500 focus:ring-indigo-500">
+                            class="block w-full border border-gray-300 rounded-lg px-3 py-2 text-sm
+                                   bg-white text-gray-900 focus:border-indigo-500 focus:ring-indigo-500">
                     </div>
                 </div>
                 <div class="px-5 py-4 bg-gray-50 border-t border-gray-100
@@ -584,7 +593,7 @@
     // Confirm Modal (Alle auschecken + Orange-Check-in)
     let confirmForm = null;
     let orangeReasonInput = null;
-    
+
     function askConfirm(message, form) {
         confirmForm = form;
         orangeReasonInput = null;
@@ -596,18 +605,14 @@
         const okBtn = document.getElementById('confirmOkBtn');
         okBtn.disabled = false;
         okBtn.textContent = 'Ja, auschecken';
-        okBtn.className = okBtn.className
-            .replace('bg-indigo-600', 'bg-red-600')
-            .replace('hover:bg-indigo-700', 'hover:bg-red-700');
-        if (!okBtn.className.includes('bg-red-600')) {
-            okBtn.classList.add('bg-red-600', 'hover:bg-red-700');
-        }
+        okBtn.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
+        okBtn.classList.add('bg-red-600', 'hover:bg-red-700');
         const modal = document.getElementById('confirmModal');
         modal.classList.remove('hidden');
         modal.setAttribute('aria-hidden', 'false');
         document.body.classList.add('overflow-hidden');
     }
-    
+
     function openOrangeCheckin(form, reasonInput, name, reason) {
         confirmForm = form;
         orangeReasonInput = reasonInput;
@@ -628,8 +633,9 @@
         modal.classList.remove('hidden');
         modal.setAttribute('aria-hidden', 'false');
         document.body.classList.add('overflow-hidden');
+        setTimeout(() => document.getElementById('confirmKulanzInput').focus(), 50);
     }
-    
+
     function closeConfirmModal() {
         const modal = document.getElementById('confirmModal');
         modal.classList.add('hidden');
@@ -640,13 +646,15 @@
         // Felder zurücksetzen
         document.getElementById('confirmOrangeHint').classList.add('hidden');
         document.getElementById('confirmOrangeKulanz').classList.add('hidden');
+        document.getElementById('confirmKulanzInput').value = '';
         // Button zurück auf rot
         const okBtn = document.getElementById('confirmOkBtn');
         okBtn.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
         okBtn.classList.add('bg-red-600', 'hover:bg-red-700');
         okBtn.textContent = 'Ja, auschecken';
+        okBtn.disabled = false;
     }
-    
+
     document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('confirmOkBtn')?.addEventListener('click', function () {
             if (!confirmForm) return;
@@ -657,6 +665,7 @@
             }
             confirmForm.submit();
         });
+
         document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape') closeConfirmModal();
         });
@@ -803,6 +812,7 @@
         el.classList.add('hidden');
         el.textContent = '';
     }
+    });
     </script>
 
 </body>
