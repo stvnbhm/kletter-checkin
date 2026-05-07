@@ -197,14 +197,10 @@ class RegistrationController extends Controller
 
         if ($needsParentConsent) {
             $consentNote = 'Jugendlicher (14–17)';
-            if ($accessReason) {
-                $accessReason .= ' · ' . $consentNote;
-            } else {
-                $accessReason = $consentNote;
-            }
-            if ($validated['member_type'] === 'member') {
-                $accessStatus = 'green';
-            }
+            $accessReason = $accessReason
+                ? $accessReason . ' · ' . $consentNote
+                : $consentNote;
+            // accessStatus bleibt unverändert – identisch zur Erwachsenen-Logik
         }
 
         // ── GAST-BLOCK / Upgrade-Logik ────────────────────────────────
