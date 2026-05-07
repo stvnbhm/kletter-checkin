@@ -544,11 +544,18 @@
                         <span class="font-semibold block mb-1">Grund für Status Orange:</span>
                         <span id="confirmOrangeReason" class="block text-amber-700"></span>
                     </div>
+                    
+                    <div id="confirmRedNextHint"
+                         class="hidden rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800">
+                        <span class="font-semibold block mb-1">Achtung:</span>
+                        Nach diesem Check-in wird der Status auf <strong>Rot</strong> gesetzt.
+                        Danach ist kein weiterer Check-in mehr möglich.
+                    </div>
 
                     {{-- Kulanzfeld (nur im Orange-Modus sichtbar) --}}
                     <div id="confirmOrangeKulanz" class="hidden">
                         <label for="confirmKulanzInput" class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                            Kulanzgrund <span id="confirmKulanzOptional" class="font-normal normal-case text-gray-400">(optional)</span>
+                            Kulanzgrund <span id="confirmKulanzOptional" class="font-normal normal-case text-gray-400">(Pflicht)</span>
                         </label>
                         <input type="text" id="confirmKulanzInput"
                             class="block w-full border border-gray-300 rounded-lg px-3 py-2 text-sm
@@ -604,36 +611,49 @@
     }
 
     function openCheckinModal(form, reasonInput, name, reason, accessStatus, nextTriggersRed, visits, lastCheckin) {
-        const isTrialLimit = (accessStatus !== 'orange'); // Schnupperlimit-Modus wenn NICHT orange
+        const isTrialLimit = (accessStatus !== 'orange');
+    
         confirmForm = form;
         orangeReasonInput = reasonInput;
-        isModalKulanzRequired = !!isTrialLimit;
-        
+        isModalKulanzRequired = true;
+        document.getElementById('confirmKulanzOptional').textContent = '(Pflicht)';
+    
         const label = isTrialLimit
             ? name + ' war bereits Schnuppern. Trotzdem einchecken?'
             : name + ' hat Status Orange. Trotzdem einchecken?';
+    
         document.getElementById('confirmModalText').textContent = label;
-        
+    
         const reasonLabel = isTrialLimit ? 'Schnupperlimit-Grund:' : 'Grund für Status Orange:';
         document.querySelector('#confirmOrangeHint span.font-semibold').textContent = '⚠️ ' + reasonLabel;
-        document.getElementById('confirmOrangeReason').textContent = reason
-            || (isTrialLimit ? 'Schnuppergast hat bereits einen Besuch absolviert.' : 'Kein Grund angegeben');
+        document.getElementById('confirmOrangeReason').textContent =
+            reason || (isTrialLimit ? 'Schnuppergast hat bereits einen Besuch absolviert.' : 'Kein Grund angegeben');
+    
         document.getElementById('confirmOrangeHint').classList.remove('hidden');
         document.getElementById('confirmOrangeKulanz').classList.remove('hidden');
+    
+        const redHint = document.getElementById('confirmRedNextHint');
+        if (nextTriggersRed) {
+            redHint.classList.remove('hidden');
+        } else {
+            redHint.classList.add('hidden');
+        }
+    
         document.getElementById('confirmKulanzInput').value = '';
         document.getElementById('confirmKulanzInput').classList.remove('border-red-500');
         document.getElementById('confirmKulanzOptional').textContent = isTrialLimit ? '(Pflicht)' : '(optional)';
-        
+    
         const okBtn = document.getElementById('confirmOkBtn');
         okBtn.disabled = false;
         okBtn.textContent = 'Trotzdem Check-in';
         okBtn.classList.remove('bg-red-600', 'hover:bg-red-700');
         okBtn.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
-        
+    
         const modal = document.getElementById('confirmModal');
         modal.classList.remove('hidden');
         modal.setAttribute('aria-hidden', 'false');
         document.body.classList.add('overflow-hidden');
+    
         setTimeout(() => document.getElementById('confirmKulanzInput').focus(), 50);
     }
     
@@ -648,6 +668,7 @@
         // Felder zurücksetzen
         document.getElementById('confirmOrangeHint').classList.add('hidden');
         document.getElementById('confirmOrangeKulanz').classList.add('hidden');
+        document.getElementById('confirmRedNextHint').classList.add('hidden');
         document.getElementById('confirmKulanzInput').value = '';
         // Button zurück auf rot
         const okBtn = document.getElementById('confirmOkBtn');
