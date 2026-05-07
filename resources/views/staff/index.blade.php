@@ -304,7 +304,8 @@
                                         '{{ $registration->access_status }}',
                                         {{ $nextCheckinTriggersRed ? 'true' : 'false' }},
                                         {{ $visits }},
-                                        '{{ $lastCheckin ? $lastCheckin->checked_in_at->format('d.m.Y H:i') : '' }}'
+                                        '{{ $lastCheckin ? $lastCheckin->checked_in_at->format('d.m.Y H:i') : '' }}',
+                                        '{{ e($registration->manual_exception_reason ?? '') }}'
                                     )"
                                     class="w-full inline-flex items-center justify-center border border-transparent
                                            bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold
@@ -487,7 +488,8 @@
                                                     '{{ $registration->access_status }}',
                                                     {{ $nextCheckinTriggersRed ? 'true' : 'false' }},
                                                     {{ $visits }},
-                                                    '{{ $lastCheckin ? $lastCheckin->checked_in_at->format('d.m.Y H:i') : '' }}'
+                                                    '{{ $lastCheckin ? $lastCheckin->checked_in_at->format('d.m.Y H:i') : '' }}',
+                                                    '{{ e($registration->manual_exception_reason ?? '') }}'
                                                 )"
                                                 class="w-full inline-flex items-center justify-center border border-transparent
                                                        bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold
@@ -543,6 +545,11 @@
                     <div id="confirmOrangeHint" class="hidden rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
                         <span class="font-semibold block mb-1">Grund für Status Orange:</span>
                         <span id="confirmOrangeReason" class="block text-amber-700"></span>
+                    </div>
+                    
+                    <div id="confirmKulanzWrapper" class="hidden rounded-lg bg-gray-50 border border-gray-200 px-4 py-3 text-sm text-gray-600">
+                        <span class="font-semibold block mb-1 text-gray-500">ℹ️ Letzter Kulanzgrund:</span>
+                        <span id="confirmLastKulanz" class="block"></span>
                     </div>
                     
                     <div id="confirmRedNextHint"
@@ -610,7 +617,7 @@
         document.body.classList.add('overflow-hidden');
     }
 
-    function openCheckinModal(form, reasonInput, name, reason, accessStatus, nextTriggersRed, visits, lastCheckin) {
+    function openCheckinModal(form, reasonInput, name, reason, accessStatus, nextTriggersRed, visits, lastCheckin, lastKulanz) {
         const isTrialLimit = (accessStatus !== 'orange');
     
         confirmForm = form;
@@ -631,6 +638,19 @@
     
         document.getElementById('confirmOrangeHint').classList.remove('hidden');
         document.getElementById('confirmOrangeKulanz').classList.remove('hidden');
+        
+        // ← NEU: Letzter Kulanzgrund anzeigen/verstecken
+        const kulanzWrapper = document.getElementById('confirmKulanzWrapper');
+        const lastKulanzEl  = document.getElementById('confirmLastKulanz');
+        const lastKulanz    = arguments[8] ?? '';   // 9. Parameter (index 8)
+        if (lastKulanz.trim() !== '') {
+            lastKulanzEl.textContent = lastKulanz;
+            kulanzWrapper.classList.remove('hidden');
+        } else {
+            lastKulanzEl.textContent = '';
+            kulanzWrapper.classList.add('hidden');
+        }
+        // ← NEU Ende
     
         const redHint = document.getElementById('confirmRedNextHint');
         if (nextTriggersRed) {
@@ -671,6 +691,10 @@
         document.getElementById('confirmRedNextHint').classList.add('hidden');
         document.getElementById('confirmKulanzInput').value = '';
         // Button zurück auf rot
+        // ← NEU: Kulanzwrapper zurücksetzen
+        document.getElementById('confirmKulanzWrapper').classList.add('hidden');
+        document.getElementById('confirmLastKulanz').textContent = '';
+        // ← NEU Ende
         const okBtn = document.getElementById('confirmOkBtn');
         okBtn.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
         okBtn.classList.add('bg-red-600', 'hover:bg-red-700');

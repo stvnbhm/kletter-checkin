@@ -97,7 +97,7 @@ class StaffController extends Controller
                 // ── CHECK-IN DURCHFÜHREN ───────────────────────────────────────
         if ($reason !== '') {
             $registration->update([
-                'access_reason' => 'Manuelle Freigabe: ' . $reason,
+                'manual_exception_reason' => $reason,
             ]);
         }
 
@@ -119,7 +119,7 @@ class StaffController extends Controller
             } else {
                 $registration->update([
                     'access_status' => 'orange',
-                    'access_reason' => 'Schnupperklettern – letzter Besuch am ' . now()->format('d.m.Y H:i') . ' Uhr',
+                    'access_reason' => 'Schnupperklettern – bereits eingecheckt am ' . now()->format('d.m.Y H:i') . ' Uhr',
                 ]);
             }
         }
@@ -161,7 +161,7 @@ class StaffController extends Controller
                 ]);
             } elseif ($registration->member_type === 'guest' && $registration->trial_visits_count >= 1) {
                 $registration->update([
-                    'access_reason' => 'Schnupperklettern: Letzter Besuch am '
+                    'access_reason' => 'Schnupperklettern – bereits eingecheckt am '
                         . $checkin->checked_in_at->format('d.m.Y \u\m H:i') . ' Uhr',
                 ]);
             }
