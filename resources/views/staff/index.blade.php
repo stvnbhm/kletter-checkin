@@ -722,6 +722,8 @@
         document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape') closeConfirmModal();
         });
+        
+    });
 
     // ── QR-Scanner ─────────────────────────────────────────────────────────
     let html5QrCode   = null;
@@ -865,7 +867,6 @@
         el.classList.add('hidden');
         el.textContent = '';
     }
-    });
     </script>
 
 </body>
