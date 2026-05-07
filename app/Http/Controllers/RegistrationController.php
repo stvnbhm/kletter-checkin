@@ -339,10 +339,26 @@ class RegistrationController extends Controller
             'registration_id' => $registration->id,
             'checked_in_at'   => now(),
         ]);
-        $registration->increment('trial_visits_count');
 
-        $message = $registration->first_name . ' ' . $registration->last_name
-                 . ' wurde erfolgreich eingecheckt.';
+        $registration->increment('trial_visits_count');
+        $registration->refresh();
+
+        // NEU: Schnuppergast nach Check-in auf orange setzen
+        if ($registration->member_type === 'guest') {
+            if ($registration->trial_visits_count >= 3) {
+                $registration->update([
+                    'access_status' => 'red',
+                    'access_reason' => 'Schnupperlimit ausgeschöpft (3/3)',
+                ]);
+            } else {
+                $registration->update([
+                    'access_status' => 'orange',
+                    'access_reason' => 'Schnupperklettern – letzter Besuch am ' . now()->format('d.m.Y H:i') . ' Uhr',
+                ]);
+            }
+        }
+
+        $message = $registration->first_name . ' ' . $registration->last_name . ' wurde erfolgreich eingecheckt.';
 
         if ($request->expectsJson()) {
             return response()->json(['success' => true, 'message' => $message]);

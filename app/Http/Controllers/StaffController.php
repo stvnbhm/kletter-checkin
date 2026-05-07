@@ -94,6 +94,7 @@ class StaffController extends Controller
         }
 
         // ── CHECK-IN DURCHFÜHREN ───────────────────────────────────────
+                // ── CHECK-IN DURCHFÜHREN ───────────────────────────────────────
         if ($reason !== '') {
             $registration->update([
                 'access_reason' => 'Manuelle Freigabe: ' . $reason,
@@ -108,17 +109,21 @@ class StaffController extends Controller
         $registration->increment('trial_visits_count');
         $registration->refresh();
 
-        // Nach Check-in: Status-Update Schnuppergast
-        if ($registration->member_type === 'guest' && $registration->trial_visits_count >= 3) {
-            $registration->update([
-                'access_status' => 'red',
-                'access_reason' => 'Schnupperlimit ausgeschöpft (3/3)',
-            ]);
-        } elseif ($registration->member_type === 'guest') {
-            $registration->update([
-                'access_reason' => 'Schnupperklettern: Letzter Besuch am ' . now()->format('d.m.Y \u\m H:i') . ' Uhr',
-            ]);
+        // Nach Check-in Status-Update Schnuppergast
+        if ($registration->member_type === 'guest') {
+            if ($registration->trial_visits_count >= 3) {
+                $registration->update([
+                    'access_status' => 'red',
+                    'access_reason' => 'Schnupperlimit ausgeschöpft (3/3)',
+                ]);
+            } else {
+                $registration->update([
+                    'access_status' => 'orange',
+                    'access_reason' => 'Schnupperklettern – letzter Besuch am ' . now()->format('d.m.Y H:i') . ' Uhr',
+                ]);
+            }
         }
+
 
         // Unverified Member nach 3 Besuchen → rot
         if ($isUnverifiedMember) {

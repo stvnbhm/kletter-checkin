@@ -641,8 +641,8 @@
     
         document.getElementById('confirmKulanzInput').value = '';
         document.getElementById('confirmKulanzInput').classList.remove('border-red-500');
-        document.getElementById('confirmKulanzOptional').textContent = isTrialLimit ? '(Pflicht)' : '(optional)';
-    
+        document.getElementById('confirmKulanzOptional').textContent = '(Pflicht)';
+
         const okBtn = document.getElementById('confirmOkBtn');
         okBtn.disabled = false;
         okBtn.textContent = 'Trotzdem Check-in';
