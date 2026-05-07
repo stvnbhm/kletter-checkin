@@ -196,7 +196,14 @@
                                           && ($registration->access_status === 'orange' || $isTrialNeedsModal);
                     
                         // Warnung im Modal: nächster Check-in sperrt
-                        $nextCheckinTriggersRed = $registration->member_type === 'guest' && $visits === 2;
+                        $isUnverifiedMember = $registration->member_type === 'member' && $registration->member === null;
+                        $unverifiedCheckins = $isUnverifiedMember
+                            ? \App\Models\Checkin::where('registration_id', $registration->id)->count()
+                            : 0;
+                        
+                        $nextCheckinTriggersRed =
+                            ($registration->member_type === 'guest' && $visits === 2) ||
+                            ($isUnverifiedMember && $unverifiedCheckins === 2);
                         
                         $accessStyle = match($registration->access_status) {
                         'green'  => 'bg-green-100 text-green-800',
@@ -374,8 +381,15 @@
                                                       && ($registration->access_status === 'orange' || $isTrialNeedsModal);
                                 
                                     // Warnung im Modal: nächster Check-in sperrt
-                                    $nextCheckinTriggersRed = $registration->member_type === 'guest' && $visits === 2;
+                                    $isUnverifiedMember = $registration->member_type === 'member' && $registration->member === null;
+                                    $unverifiedCheckins = $isUnverifiedMember
+                                        ? \App\Models\Checkin::where('registration_id', $registration->id)->count()
+                                        : 0;
                                     
+                                    $nextCheckinTriggersRed =
+                                        ($registration->member_type === 'guest' && $visits === 2) ||
+                                        ($isUnverifiedMember && $unverifiedCheckins === 2);
+                                                                        
                                     $accessStyle = match($registration->access_status) {
                                         'green'  => 'bg-green-100 text-green-800',
                                         'blue'   => 'bg-blue-100 text-blue-800',
