@@ -642,8 +642,7 @@
         // ← NEU: Letzter Kulanzgrund anzeigen/verstecken
         const kulanzWrapper = document.getElementById('confirmKulanzWrapper');
         const lastKulanzEl  = document.getElementById('confirmLastKulanz');
-        const lastKulanz    = arguments[8] ?? '';   // 9. Parameter (index 8)
-        if (lastKulanz.trim() !== '') {
+        if (lastKulanz && lastKulanz.trim() !== '') {
             lastKulanzEl.textContent = lastKulanz;
             kulanzWrapper.classList.remove('hidden');
         } else {
@@ -774,7 +773,7 @@
         try {
             await html5QrCode.start(
                 cameraId,
-                { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
+                { fps: 10, qrbox: { width: 250, height: 250 } },
                 onScanSuccess,
                 onScanError
             );
