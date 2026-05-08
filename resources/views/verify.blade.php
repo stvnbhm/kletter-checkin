@@ -42,8 +42,9 @@
                     'orange' => ['bg' => 'bg-orange-50',  'border' => 'border-orange-500', 'text' => 'text-orange-800', 'icon' => '⚠️', 'label' => 'Bitte beim Hallendienst melden'],
                     'red'    => ['bg' => 'bg-red-50',     'border' => 'border-red-500',    'text' => 'text-red-800',    'icon' => '🚫', 'label' => 'Kein Zutritt'],
                 ];
+                $displayStatus = ($currentCheckin) ? 'green' : $registration->access_status;
                 $c = $colors[$registration->access_status] ?? $colors['red'];
-                
+
                 // Prüfen ob Check-in blockiert werden muss (Status Rot oder Orange ohne aktive Kulanz)
                 $hasActiveKulanz = $registration->manual_exception_until && $registration->manual_exception_until->isFuture();
                 $isTrialUsed = $registration->access_status === 'blue'
@@ -56,7 +57,7 @@
             <div class="bg-white rounded-xl border-2 {{ $c['border'] }} {{ $c['bg'] }} p-6 mb-6 text-center shadow-sm">
                 <div class="text-5xl mb-3">{{ $c['icon'] }}</div>
                 <div class="text-2xl font-bold {{ $c['text'] }}">{{ $c['label'] }}</div>
-                @if($registration->access_reason)
+                @if($registration->access_reason && !$currentCheckin)
                     <div class="mt-2 text-sm {{ $c['text'] }} opacity-80 font-medium">
                         {{ $registration->access_reason }}
                     </div>
@@ -139,7 +140,7 @@
                                 @endif
                             </div>
                         </div>
-                    
+
                     @else
                         <form method="POST" action="{{ url('verify/' . $registration->qr_token . '/checkin') }}">
                             @csrf
