@@ -179,6 +179,14 @@
                         $currentCheckin = $registration->currentCheckin;
                         $visits         = $registration->trial_visits_count ?? 0;
                         $lastCheckin    = $registration->checkins()->latest('checked_in_at')->first();
+                        $pastCheckinDates = null;
+
+                        if ($registration->membertype === 'guest' && $visits > 0) {
+                            $pastCheckinDates = $registration->checkins
+                                ->sortBy('checkedinat')
+                                ->map(fn($c) => $c->checkedinat->format('d.m.Y H:i'))
+                                ->implode(' Uhr und am ');
+                        }
 
                         $isTrialMaxReached         = $registration->member_type === 'guest' && $visits >= 3;
                         $isUnverifiedMemberBlocked = $registration->member_type === 'member'
@@ -363,6 +371,7 @@
                                 @php
                                     $currentCheckin = $registration->currentCheckin;
                                     $visits         = $registration->trial_visits_count ?? 0;
+                                    $pastCheckinDates = null;
 
                                     // Statt nur $lastCheckin holst du alle bisherigen als formatierten Text:
                                     $pastCheckinDates = '';
