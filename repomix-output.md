@@ -7208,7 +7208,7 @@ class StaffController extends Controller
             } else {
                 $registration->update([
                     'access_status' => 'orange',
-                    'access_reason' => 'Schnupperklettern – bereits eingecheckt am ' . now()->format('d.m.Y H:i') . ' Uhr',
+                    'access_reason' => 'Schnupperklettern absolviert am ' . now()->format('d.m.Y'),
                 ]);
             }
         }
@@ -8850,32 +8850,32 @@ class RegistrationController extends Controller
                         $currentCheckin = $registration->currentCheckin;
                         $visits         = $registration->trial_visits_count ?? 0;
                         $lastCheckin    = $registration->checkins()->latest('checked_in_at')->first();
-                    
+
                         $isTrialMaxReached         = $registration->member_type === 'guest' && $visits >= 3;
                         $isUnverifiedMemberBlocked = $registration->member_type === 'member'
                                                    && $registration->member === null
                                                    && $registration->access_status === 'red';
-                    
+
                         // Hart gesperrt = keine Aktion möglich
                         $isHardBlocked = $registration->access_status === 'red'
                                       || $isTrialMaxReached
                                       || $isUnverifiedMemberBlocked;
-                    
+
                         // Modal nötig = orange ODER Schnuppergast Besuch 2–3
                         $isTrialNeedsModal = $registration->member_type === 'guest' && $visits >= 1 && $visits < 3;
                         $requiresModal     = !$isHardBlocked
                                           && ($registration->access_status === 'orange' || $isTrialNeedsModal);
-                    
+
                         // Warnung im Modal: nächster Check-in sperrt
                         $isUnverifiedMember = $registration->member_type === 'member' && $registration->member === null;
                         $unverifiedCheckins = $isUnverifiedMember
                             ? \App\Models\Checkin::where('registration_id', $registration->id)->count()
                             : 0;
-                        
+
                         $nextCheckinTriggersRed =
                             ($registration->member_type === 'guest' && $visits === 2) ||
                             ($isUnverifiedMember && $unverifiedCheckins === 2);
-                        
+
                         $accessStyle = match($registration->access_status) {
                         'green'  => 'bg-green-100 text-green-800',
                         'blue'   => 'bg-blue-100 text-blue-800',
@@ -8927,22 +8927,22 @@ class RegistrationController extends Controller
                         </div>
 
                         {{-- Zusatzinfos --}}
-                        @if ($registration->needs_parent_consent)
+                        @if ($registration->needs_parent_consent || $registration->parent_consent_received)
                             <div class="text-xs text-gray-600 space-y-1 border-t border-gray-100 pt-2">
-                                <div>Klettert alleine? – dann Formular nötig
+                                <div>
+                                    Klettert alleine? – dann Formular nötig
                                     (<a href="https://www.oetk-langenlois.at/fileadmin/Einverstaendniserklaerung-14-18.pdf"
                                         target="_blank" rel="noopener noreferrer"
                                         class="underline text-gray-500">PDF</a>)
+
                                     @if ($registration->parent_consent_received)
-                                        <span class="text-gray-400">(geprüft)</span>
+                                        <span class="text-gray-400">darf auch alleine klettern</span>
                                     @else
-                                        <form method="POST"
-                                              action="{{ route('staff.parent-consent', $registration) }}"
-                                              class="inline">
+                                        <form method="POST" action="{{ route('staff.parent-consent', $registration) }}" class="inline">
                                             @csrf
                                             <button type="submit"
                                                 class="underline text-gray-600 bg-transparent border-none p-0 cursor-pointer text-xs">
-                                                Formular abgegeben
+                                                Formular entgegengenommen
                                             </button>
                                         </form>
                                     @endif
@@ -8958,14 +8958,14 @@ class RegistrationController extends Controller
                         <div class="border-t border-gray-100 pt-3">
                             @if ($currentCheckin)
                                 <span>Eingecheckt {{ $currentCheckin->checked_in_at->format('H:i') }} Uhr</span>
-                            
+
                             @elseif ($isHardBlocked)
                                 <button disabled class="w-full inline-flex items-center justify-center border border-gray-200
                                                        bg-gray-100 text-gray-400 rounded-lg px-3 py-2 text-sm font-semibold
                                                        cursor-not-allowed min-h-[44px]">
                                    Check-in
                                </button>
-                            
+
                             @elseif ($requiresModal)
                                 {{-- Verstecktes Formular --}}
                                 <form id="checkin-form-{{ $registration->id }}" method="POST"
@@ -8990,7 +8990,7 @@ class RegistrationController extends Controller
                                            hover:bg-indigo-700 transition min-h-[44px] touch-manipulation">
                                     Check-in
                                 </button>
-                            
+
                             @else
                                 <form method="POST" action="{{ route('staff.checkin', $registration) }}">
                                     @csrf
@@ -9035,32 +9035,32 @@ class RegistrationController extends Controller
                                     $currentCheckin = $registration->currentCheckin;
                                     $visits         = $registration->trial_visits_count ?? 0;
                                     $lastCheckin    = $registration->checkins()->latest('checked_in_at')->first();
-                                
+
                                     $isTrialMaxReached         = $registration->member_type === 'guest' && $visits >= 3;
                                     $isUnverifiedMemberBlocked = $registration->member_type === 'member'
                                                                && $registration->member === null
                                                                && $registration->access_status === 'red';
-                                
+
                                     // Hart gesperrt = keine Aktion möglich
                                     $isHardBlocked = $registration->access_status === 'red'
                                                   || $isTrialMaxReached
                                                   || $isUnverifiedMemberBlocked;
-                                
+
                                     // Modal nötig = orange ODER Schnuppergast Besuch 2–3
                                     $isTrialNeedsModal = $registration->member_type === 'guest' && $visits >= 1 && $visits < 3;
                                     $requiresModal     = !$isHardBlocked
                                                       && ($registration->access_status === 'orange' || $isTrialNeedsModal);
-                                
+
                                     // Warnung im Modal: nächster Check-in sperrt
                                     $isUnverifiedMember = $registration->member_type === 'member' && $registration->member === null;
                                     $unverifiedCheckins = $isUnverifiedMember
                                         ? \App\Models\Checkin::where('registration_id', $registration->id)->count()
                                         : 0;
-                                    
+
                                     $nextCheckinTriggersRed =
                                         ($registration->member_type === 'guest' && $visits === 2) ||
                                         ($isUnverifiedMember && $unverifiedCheckins === 2);
-                                                                        
+
                                     $accessStyle = match($registration->access_status) {
                                         'green'  => 'bg-green-100 text-green-800',
                                         'blue'   => 'bg-blue-100 text-blue-800',
@@ -9117,46 +9117,46 @@ class RegistrationController extends Controller
 
                                     {{-- ZUSATZINFOS --}}
                                     <td class="px-4 py-4 align-top text-sm text-gray-600">
-                                        @if ($registration->needs_parent_consent)
-                                            <div>Klettert alleine? – dann Formular nötig
-                                                (<a href="https://www.oetk-langenlois.at/fileadmin/Einverstaendniserklaerung-14-18.pdf"
-                                                    target="_blank" rel="noopener noreferrer"
-                                                    class="text-gray-500 underline">PDF</a>)
-                                            </div>
-                                            <div class="text-xs text-gray-400 mt-0.5">
-                                                @if ($registration->parent_consent_received)
-                                                    Formular geprüft
-                                                @else
-                                                    <form method="POST"
-                                                          action="{{ route('staff.parent-consent', $registration) }}">
-                                                        @csrf
-                                                        <button type="submit"
-                                                            class="text-xs text-gray-600 underline bg-transparent
-                                                                   border-none p-0 cursor-pointer hover:text-gray-900">
-                                                            Formular abgegeben
-                                                        </button>
-                                                    </form>
-                                                @endif
-                                            </div>
-                                        @elseif (!$currentCheckin && $registration->access_reason)
-                                            <span class="text-gray-600">{{ $registration->access_reason }}</span>
-                                        @else
-                                            <span class="text-gray-300">—</span>
-                                        @endif
+                                      @if ($registration->needs_parent_consent || $registration->parent_consent_received)
+                                          <div class="text-xs text-gray-600 space-y-1 border-t border-gray-100 pt-2">
+                                              <div>
+                                                  Klettert alleine? – dann Formular nötig
+                                                  (<a href="https://www.oetk-langenlois.at/fileadmin/Einverstaendniserklaerung-14-18.pdf"
+                                                      target="_blank" rel="noopener noreferrer"
+                                                      class="underline text-gray-500">PDF</a>)
+
+                                                  @if ($registration->parent_consent_received)
+                                                      <span class="text-gray-400">darf auch alleine klettern</span>
+                                                  @else
+                                                      <form method="POST" action="{{ route('staff.parent-consent', $registration) }}" class="inline">
+                                                          @csrf
+                                                          <button type="submit"
+                                                              class="underline text-gray-600 bg-transparent border-none p-0 cursor-pointer text-xs">
+                                                              Formular entgegengenommen
+                                                          </button>
+                                                      </form>
+                                                  @endif
+                                              </div>
+                                          </div>
+                                      @elseif (!$currentCheckin && $registration->access_reason)
+                                          <div class="text-xs text-gray-500 border-t border-gray-100 pt-2">
+                                              {{ $registration->access_reason }}
+                                          </div>
+                                      @endif
                                     </td>
 
                                     {{-- ── CHECK-IN AKTION (Desktop) ──────────────── --}}
                                     <td class="px-4 py-4 align-top">
                                         @if ($currentCheckin)
                                             <span>Eingecheckt {{ $currentCheckin->checked_in_at->format('H:i') }} Uhr</span>
-                                        
+
                                         @elseif ($isHardBlocked)
                                             <button disabled class="w-full inline-flex items-center justify-center border border-gray-200
                                                                    bg-gray-100 text-gray-400 rounded-lg px-3 py-2 text-sm font-semibold
                                                                    cursor-not-allowed min-h-[44px]">
                                                Check-in
                                            </button>
-                                        
+
                                         @elseif ($requiresModal)
                                             {{-- Verstecktes Formular --}}
                                             <form id="checkin-form-{{ $registration->id }}" method="POST"
@@ -9181,7 +9181,7 @@ class RegistrationController extends Controller
                                                        hover:bg-indigo-700 transition min-h-[44px] touch-manipulation">
                                                 Check-in
                                             </button>
-                                        
+
                                         @else
                                             <form method="POST" action="{{ route('staff.checkin', $registration) }}">
                                                 @csrf
@@ -9228,15 +9228,14 @@ class RegistrationController extends Controller
 
                     {{-- Orange-Hinweis (nur im Orange-Modus sichtbar) --}}
                     <div id="confirmOrangeHint" class="hidden rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
-                        <span class="font-semibold block mb-1">Grund für Status Orange:</span>
-                        <span id="confirmOrangeReason" class="block text-amber-700"></span>
+                        <span id="confirmOrangeReason" class="block font-semibold"></span>
                     </div>
-                    
+
                     <div id="confirmKulanzWrapper" class="hidden rounded-lg bg-gray-50 border border-gray-200 px-4 py-3 text-sm text-gray-600">
                         <span class="font-semibold block mb-1 text-gray-500">ℹ️ Letzter Kulanzgrund:</span>
                         <span id="confirmLastKulanz" class="block"></span>
                     </div>
-                    
+
                     <div id="confirmRedNextHint"
                          class="hidden rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800">
                         <span class="font-semibold block mb-1">Achtung:</span>
@@ -9303,28 +9302,27 @@ class RegistrationController extends Controller
     }
 
     function openCheckinModal(form, reasonInput, name, reason, accessStatus, nextTriggersRed, visits, lastCheckin, lastKulanz) {
-        const isTrialLimit = (accessStatus !== 'orange');
-    
+        const isTrialLimit = visits >= 1 && accessStatus !== 'orange';
+
         confirmForm = form;
         orangeReasonInput = reasonInput;
         isModalKulanzRequired = true;
         document.getElementById('confirmKulanzOptional').textContent = '(Pflicht)';
-    
+
         const label = isTrialLimit
             ? name + ' war bereits Schnuppern. Trotzdem einchecken?'
             : name + ' hat Status Orange. Trotzdem einchecken?';
-    
+
         document.getElementById('confirmModalText').textContent = label;
-    
-        const reasonLabel = isTrialLimit ? 'Schnupperlimit-Grund:' : 'Grund für Status Orange:';
-        document.querySelector('#confirmOrangeHint span.font-semibold').textContent = '⚠️ ' + reasonLabel;
-        document.getElementById('confirmOrangeReason').textContent =
-            reason || (isTrialLimit ? 'Schnuppergast hat bereits einen Besuch absolviert.' : 'Kein Grund angegeben');
-    
+
+        // --- NEU: Direkt ⚠️ + Grund anzeigen ---
+        const displayReason = reason || (isTrialLimit ? 'Schnuppergast hat bereits einen Besuch absolviert.' : 'Kein spezifischer Grund angegeben');
+        document.getElementById('confirmOrangeReason').textContent = '⚠️ ' + displayReason;
+
         document.getElementById('confirmOrangeHint').classList.remove('hidden');
         document.getElementById('confirmOrangeKulanz').classList.remove('hidden');
-        
-        // ← NEU: Letzter Kulanzgrund anzeigen/verstecken
+
+        // Letzter Kulanzgrund anzeigen/verstecken
         const kulanzWrapper = document.getElementById('confirmKulanzWrapper');
         const lastKulanzEl  = document.getElementById('confirmLastKulanz');
         if (lastKulanz && lastKulanz.trim() !== '') {
@@ -9334,15 +9332,16 @@ class RegistrationController extends Controller
             lastKulanzEl.textContent = '';
             kulanzWrapper.classList.add('hidden');
         }
-        // ← NEU Ende
-    
+
+        // ... (restlicher Code mit nextCheckinTriggersRed bleibt unverändert) ...
+
         const redHint = document.getElementById('confirmRedNextHint');
         if (nextTriggersRed) {
             redHint.classList.remove('hidden');
         } else {
             redHint.classList.add('hidden');
         }
-    
+
         document.getElementById('confirmKulanzInput').value = '';
         document.getElementById('confirmKulanzInput').classList.remove('border-red-500');
         document.getElementById('confirmKulanzOptional').textContent = '(Pflicht)';
@@ -9352,15 +9351,15 @@ class RegistrationController extends Controller
         okBtn.textContent = 'Trotzdem Check-in';
         okBtn.classList.remove('bg-red-600', 'hover:bg-red-700');
         okBtn.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
-    
+
         const modal = document.getElementById('confirmModal');
         modal.classList.remove('hidden');
         modal.setAttribute('aria-hidden', 'false');
         document.body.classList.add('overflow-hidden');
-    
+
         setTimeout(() => document.getElementById('confirmKulanzInput').focus(), 50);
     }
-    
+
     function closeConfirmModal() {
         const modal = document.getElementById('confirmModal');
         modal.classList.add('hidden');
@@ -9406,7 +9405,7 @@ class RegistrationController extends Controller
         document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape') closeConfirmModal();
         });
-        
+
     });
 
     // ── QR-Scanner ─────────────────────────────────────────────────────────
