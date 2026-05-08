@@ -294,7 +294,7 @@
                                     </td>
                                     <td class="px-4 py-3">
                                         @if($reg->qr_token)
-                                            <a href="{{ route('verify.checkin', $reg->qr_token) }}"
+                                            <a href="{{ route('verify', $reg->qr_token) }}"
                                                target="_blank"
                                                class="font-mono text-xs text-indigo-600 hover:text-indigo-800 hover:underline break-all"
                                                title="{{ route('verify', $reg->qr_token) }}">

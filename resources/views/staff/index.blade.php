@@ -220,9 +220,9 @@
                         default  => 'bg-red-100 text-red-800',
                     };
                     $accessText = match($registration->access_status) {
-                        'green'  => 'Zutritt ok',
+                        'green'  => 'Zutritt OK',
                         'blue'   => 'Schnuppergast',
-                        'orange' => 'Warnung',
+                        'orange' => 'Freigabe nötig',
                         default  => 'Gesperrt',
                     };
                     @endphp
