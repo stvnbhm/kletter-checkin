@@ -119,7 +119,7 @@ class StaffController extends Controller
             } else {
                 $registration->update([
                     'access_status' => 'orange',
-                    'access_reason' => 'Schnupperklettern – bereits eingecheckt am ' . now()->format('d.m.Y H:i') . ' Uhr',
+                    'access_reason' => 'Schnupperklettern absolviert am ' . now()->format('d.m.Y'),
                 ]);
             }
         }

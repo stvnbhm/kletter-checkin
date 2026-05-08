@@ -631,7 +631,7 @@
     }
 
     function openCheckinModal(form, reasonInput, name, reason, accessStatus, nextTriggersRed, visits, lastCheckin, lastKulanz) {
-        const isTrialLimit = (accessStatus !== 'orange');
+        const isTrialLimit = visits >= 1 && accessStatus !== 'orange';
 
         confirmForm = form;
         orangeReasonInput = reasonInput;
