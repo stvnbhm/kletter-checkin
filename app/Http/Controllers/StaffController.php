@@ -14,7 +14,7 @@ class StaffController extends Controller
     {
         $query = $request->input('q');
 
-        $registrations = Registration::with('member', 'currentCheckin')
+        $registrations = Registration::with('member', 'currentCheckin', 'checkins')
             ->when($query, function ($q) use ($query) {
                 $q->where(function ($sub) use ($query) {
                     $sub->where('first_name', 'like', '%' . $query . '%')

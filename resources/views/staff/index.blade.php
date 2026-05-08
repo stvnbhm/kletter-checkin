@@ -311,7 +311,7 @@
                                         '{{ $registration->access_status }}',
                                         {{ $nextCheckinTriggersRed ? 'true' : 'false' }},
                                         {{ $visits }},
-                                        '{{ $lastCheckin ? $lastCheckin->checked_in_at->format('d.m.Y H:i') : '' }}',
+                                        '{{ $pastCheckinDates ? $pastCheckinDates . ' Uhr' : '' }}',
                                         '{{ e($registration->manual_exception_reason ?? '') }}'
                                     )"
                                     class="w-full inline-flex items-center justify-center border border-transparent
@@ -363,7 +363,15 @@
                                 @php
                                     $currentCheckin = $registration->currentCheckin;
                                     $visits         = $registration->trial_visits_count ?? 0;
-                                    $lastCheckin    = $registration->checkins()->latest('checked_in_at')->first();
+
+                                    // Statt nur $lastCheckin holst du alle bisherigen als formatierten Text:
+                                    $pastCheckinDates = '';
+                                    if ($registration->member_type === 'guest' && $visits > 0) {
+                                        $pastCheckinDates = $registration->checkins
+                                            ->sortBy('checked_in_at')
+                                            ->map(fn($c) => $c->checked_in_at->format('d.m.Y H:i'))
+                                            ->implode(' Uhr und am ');
+                                    }
 
                                     $isTrialMaxReached         = $registration->member_type === 'guest' && $visits >= 3;
                                     $isUnverifiedMemberBlocked = $registration->member_type === 'member'
@@ -502,7 +510,7 @@
                                                     '{{ $registration->access_status }}',
                                                     {{ $nextCheckinTriggersRed ? 'true' : 'false' }},
                                                     {{ $visits }},
-                                                    '{{ $lastCheckin ? $lastCheckin->checked_in_at->format('d.m.Y H:i') : '' }}',
+                                                    '{{ $pastCheckinDates ? $pastCheckinDates . ' Uhr' : '' }}',
                                                     '{{ e($registration->manual_exception_reason ?? '') }}'
                                                 )"
                                                 class="w-full inline-flex items-center justify-center border border-transparent
@@ -630,7 +638,7 @@
         document.body.classList.add('overflow-hidden');
     }
 
-    function openCheckinModal(form, reasonInput, name, reason, accessStatus, nextTriggersRed, visits, lastCheckin, lastKulanz) {
+    function openCheckinModal(form, reasonInput, name, reason, accessStatus, nextTriggersRed, visits, pastCheckinDates, lastKulanz) {
         const isTrialLimit = visits >= 1 && accessStatus !== 'orange';
 
         confirmForm = form;
@@ -645,9 +653,13 @@
         document.getElementById('confirmModalText').textContent = label;
 
         // --- NEU: Direkt ⚠️ + Grund anzeigen ---
-        const displayReason = reason || (isTrialLimit ? 'Schnuppergast hat bereits einen Besuch absolviert.' : 'Kein spezifischer Grund angegeben');
-        document.getElementById('confirmOrangeReason').textContent = '⚠️ ' + displayReason;
+        const displayReason = isTrialLimit
+            ? (pastCheckinDates
+                ? `Schnupperklettern bereits absolviert am ${pastCheckinDates}`
+                : 'Schnuppergast hat bereits einen Besuch absolviert.')
+            : (reason || 'Kein spezifischer Grund angegeben');
 
+        document.getElementById('confirmOrangeReason').textContent = '⚠️ ' + displayReason;
         document.getElementById('confirmOrangeHint').classList.remove('hidden');
         document.getElementById('confirmOrangeKulanz').classList.remove('hidden');
 
