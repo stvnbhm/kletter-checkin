@@ -264,7 +264,7 @@
                         </div>
 
                         {{-- Zusatzinfos --}}
-                        @if ($registration->needs_parent_consent || $registration->parent_consent_received)
+                        @if ($registration->needs_parent_consent)
                             <div class="text-xs text-gray-600 space-y-1 border-t border-gray-100 pt-2">
                                 <div>
                                     Klettert alleine? – dann Formular nötig
@@ -273,13 +273,13 @@
                                         class="underline text-gray-500">PDF</a>)
 
                                     @if ($registration->parent_consent_received)
-                                        <span class="text-gray-400">darf auch alleine klettern</span>
+                                        <span class="text-gray-600">Jugendlicher 14–17 – darf auch alleine klettern</span>
                                     @else
                                         <form method="POST" action="{{ route('staff.parent-consent', $registration) }}" class="inline">
                                             @csrf
                                             <button type="submit"
                                                 class="underline text-gray-600 bg-transparent border-none p-0 cursor-pointer text-xs">
-                                                Formular entgegengenommen
+                                                Formular erhalten
                                             </button>
                                         </form>
                                     @endif
@@ -463,7 +463,7 @@
 
                                     {{-- ZUSATZINFOS --}}
                                     <td class="px-4 py-4 align-top text-sm text-gray-600">
-                                      @if ($registration->needs_parent_consent || $registration->parent_consent_received)
+                                      @if ($registration->needs_parent_consent)
                                           <div class="text-xs text-gray-600 space-y-1 border-t border-gray-100 pt-2">
                                               <div>
                                                   Klettert alleine? – dann Formular nötig
@@ -472,13 +472,13 @@
                                                       class="underline text-gray-500">PDF</a>)
 
                                                   @if ($registration->parent_consent_received)
-                                                      <span class="text-gray-400">darf auch alleine klettern</span>
+                                                      <span class="text-gray-600">Jugendlicher 14–17 – darf auch alleine klettern</span>
                                                   @else
                                                       <form method="POST" action="{{ route('staff.parent-consent', $registration) }}" class="inline">
                                                           @csrf
                                                           <button type="submit"
                                                               class="underline text-gray-600 bg-transparent border-none p-0 cursor-pointer text-xs">
-                                                              Formular entgegengenommen
+                                                              Formular erhalten
                                                           </button>
                                                       </form>
                                                   @endif
