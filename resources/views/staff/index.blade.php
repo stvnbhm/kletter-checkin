@@ -446,32 +446,32 @@
 
                                     {{-- ZUSATZINFOS --}}
                                     <td class="px-4 py-4 align-top text-sm text-gray-600">
-                                        @if ($registration->needs_parent_consent)
-                                            <div>Klettert alleine? – dann Formular nötig
-                                                (<a href="https://www.oetk-langenlois.at/fileadmin/Einverstaendniserklaerung-14-18.pdf"
-                                                    target="_blank" rel="noopener noreferrer"
-                                                    class="text-gray-500 underline">PDF</a>)
-                                            </div>
-                                            <div class="text-xs text-gray-400 mt-0.5">
-                                                @if ($registration->parent_consent_received)
-                                                    Formular geprüft
-                                                @else
-                                                    <form method="POST"
-                                                          action="{{ route('staff.parent-consent', $registration) }}">
-                                                        @csrf
-                                                        <button type="submit"
-                                                            class="text-xs text-gray-600 underline bg-transparent
-                                                                   border-none p-0 cursor-pointer hover:text-gray-900">
-                                                            Formular abgegeben
-                                                        </button>
-                                                    </form>
-                                                @endif
-                                            </div>
-                                        @elseif (!$currentCheckin && $registration->access_reason)
-                                            <span class="text-gray-600">{{ $registration->access_reason }}</span>
-                                        @else
-                                            <span class="text-gray-300">—</span>
-                                        @endif
+                                      @if ($registration->needs_parent_consent || $registration->parent_consent_received)
+                                          <div class="text-xs text-gray-600 space-y-1 border-t border-gray-100 pt-2">
+                                              <div>
+                                                  Klettert alleine? – dann Formular nötig
+                                                  (<a href="https://www.oetk-langenlois.at/fileadmin/Einverstaendniserklaerung-14-18.pdf"
+                                                      target="_blank" rel="noopener noreferrer"
+                                                      class="underline text-gray-500">PDF</a>)
+
+                                                  @if ($registration->parent_consent_received)
+                                                      <span class="text-gray-400">darf auch alleine klettern</span>
+                                                  @else
+                                                      <form method="POST" action="{{ route('staff.parent-consent', $registration) }}" class="inline">
+                                                          @csrf
+                                                          <button type="submit"
+                                                              class="underline text-gray-600 bg-transparent border-none p-0 cursor-pointer text-xs">
+                                                              Formular entgegengenommen
+                                                          </button>
+                                                      </form>
+                                                  @endif
+                                              </div>
+                                          </div>
+                                      @elseif (!$currentCheckin && $registration->access_reason)
+                                          <div class="text-xs text-gray-500 border-t border-gray-100 pt-2">
+                                              {{ $registration->access_reason }}
+                                          </div>
+                                      @endif
                                     </td>
 
                                     {{-- ── CHECK-IN AKTION (Desktop) ──────────────── --}}
@@ -644,15 +644,14 @@
 
         document.getElementById('confirmModalText').textContent = label;
 
-        const reasonLabel = isTrialLimit ? 'Schnupperlimit-Grund:' : 'Grund für Status Orange:';
-        document.querySelector('#confirmOrangeHint span.font-semibold').textContent = '⚠️ ' + reasonLabel;
-        document.getElementById('confirmOrangeReason').textContent =
-            reason || (isTrialLimit ? 'Schnuppergast hat bereits einen Besuch absolviert.' : 'Kein Grund angegeben');
+        // --- NEU: Direkt ⚠️ + Grund anzeigen ---
+        const displayReason = reason || (isTrialLimit ? 'Schnuppergast hat bereits einen Besuch absolviert.' : 'Kein spezifischer Grund angegeben');
+        document.getElementById('confirmOrangeReason').textContent = '⚠️ ' + displayReason;
 
         document.getElementById('confirmOrangeHint').classList.remove('hidden');
         document.getElementById('confirmOrangeKulanz').classList.remove('hidden');
 
-        // ← NEU: Letzter Kulanzgrund anzeigen/verstecken
+        // Letzter Kulanzgrund anzeigen/verstecken
         const kulanzWrapper = document.getElementById('confirmKulanzWrapper');
         const lastKulanzEl  = document.getElementById('confirmLastKulanz');
         if (lastKulanz && lastKulanz.trim() !== '') {
@@ -662,7 +661,8 @@
             lastKulanzEl.textContent = '';
             kulanzWrapper.classList.add('hidden');
         }
-        // ← NEU Ende
+
+        // ... (restlicher Code mit nextCheckinTriggersRed bleibt unverändert) ...
 
         const redHint = document.getElementById('confirmRedNextHint');
         if (nextTriggersRed) {
