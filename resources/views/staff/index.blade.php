@@ -184,8 +184,8 @@
                         if ($registration->membertype === 'guest' && $visits > 0) {
                             $pastCheckinDates = $registration->checkins
                                 ->sortBy('checkedinat')
-                                ->map(fn($c) => $c->checkedinat->format('d.m.Y H:i'))
-                                ->implode(' Uhr und am ');
+                                ->map(fn($c) => $c->checked_in_at->format('d.m.Y'))
+                                ->implode('und am ');
                         }
 
                         $isTrialMaxReached         = $registration->member_type === 'guest' && $visits >= 3;
@@ -319,7 +319,7 @@
                                         '{{ $registration->access_status }}',
                                         {{ $nextCheckinTriggersRed ? 'true' : 'false' }},
                                         {{ $visits }},
-                                        '{{ $pastCheckinDates ? $pastCheckinDates . ' Uhr' : '' }}',
+                                        '{{ $pastCheckinDates ? $pastCheckinDates : '' }}',
                                         '{{ e($registration->manual_exception_reason ?? '') }}'
                                     )"
                                     class="w-full inline-flex items-center justify-center border border-transparent
@@ -378,8 +378,8 @@
                                     if ($registration->member_type === 'guest' && $visits > 0) {
                                         $pastCheckinDates = $registration->checkins
                                             ->sortBy('checked_in_at')
-                                            ->map(fn($c) => $c->checked_in_at->format('d.m.Y H:i'))
-                                            ->implode(' Uhr und am ');
+                                            ->map(fn($c) => $c->checked_in_at->format('d.m.Y'))
+                                            ->implode('und am ');
                                     }
 
                                     $isTrialMaxReached         = $registration->member_type === 'guest' && $visits >= 3;
@@ -519,7 +519,7 @@
                                                     '{{ $registration->access_status }}',
                                                     {{ $nextCheckinTriggersRed ? 'true' : 'false' }},
                                                     {{ $visits }},
-                                                    '{{ $pastCheckinDates ? $pastCheckinDates . ' Uhr' : '' }}',
+                                                    '{{ $pastCheckinDates ? $pastCheckinDates : '' }}',
                                                     '{{ e($registration->manual_exception_reason ?? '') }}'
                                                 )"
                                                 class="w-full inline-flex items-center justify-center border border-transparent

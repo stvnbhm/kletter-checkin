@@ -31,7 +31,7 @@ class AdminController extends Controller
                 if ($statusFilter === 'guest') {
                     $q->where('member_type', 'guest');
                 } else {
-                    $q->where('accessstatus', $statusFilter);
+                    $q->where('access_status', $statusFilter);
                 }
             })
             ->orderByDesc('created_at')

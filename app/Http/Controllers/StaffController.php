@@ -119,7 +119,7 @@ class StaffController extends Controller
             } else {
                 $registration->update([
                     'access_status' => 'orange',
-                    'access_reason' => 'Schnupperklettern absolviert am ' . now()->format('d.m.Y'),
+                    'access_reason' => 'Schnupperklettern bereits absolviert am ' . now()->format('d.m.Y'),
                 ]);
             }
         }
@@ -161,8 +161,8 @@ class StaffController extends Controller
                 ]);
             } elseif ($registration->member_type === 'guest' && $registration->trial_visits_count >= 1) {
                 $registration->update([
-                    'access_reason' => 'Schnupperklettern – bereits eingecheckt am '
-                        . $checkin->checked_in_at->format('d.m.Y \u\m H:i') . ' Uhr',
+                    'access_reason' => 'Schnupperklettern bereits absolviert am '
+                        . $checkin->checked_in_at->format('d.m.Y \u\m'),
                 ]);
             }
 
