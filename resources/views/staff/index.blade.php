@@ -185,7 +185,7 @@
                             $pastCheckinDates = $registration->checkins
                                 ->sortBy('checkedinat')
                                 ->map(fn($c) => $c->checked_in_at->format('d.m.Y'))
-                                ->implode('und am ');
+                                ->implode(' und am ');
                         }
 
                         $isTrialMaxReached         = $registration->member_type === 'guest' && $visits >= 3;
@@ -379,7 +379,7 @@
                                         $pastCheckinDates = $registration->checkins
                                             ->sortBy('checked_in_at')
                                             ->map(fn($c) => $c->checked_in_at->format('d.m.Y'))
-                                            ->implode('und am ');
+                                            ->implode(' und am ');
                                     }
 
                                     $isTrialMaxReached         = $registration->member_type === 'guest' && $visits >= 3;
@@ -416,7 +416,7 @@
                                     $accessText = match($registration->access_status) {
                                         'green'  => 'Zutritt ok',
                                         'blue'   => 'Schnuppergast',
-                                        'orange' => 'Warnung',
+                                        'orange' => 'Freigabe nötig',
                                         default  => 'Gesperrt',
                                     };
                                 @endphp
