@@ -28,7 +28,11 @@ class AdminController extends Controller
                 });
             })
             ->when($statusFilter, function ($q) use ($statusFilter) {
-                $q->where('access_status', $statusFilter);
+                if ($statusFilter === 'guest') {
+                    $q->where('member_type', 'guest');
+                } else {
+                    $q->where('accessstatus', $statusFilter);
+                }
             })
             ->orderByDesc('created_at')
             ->paginate(30)

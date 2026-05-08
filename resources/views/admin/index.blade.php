@@ -220,8 +220,8 @@
                       >
                       <select name="status" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400">
                           <option value="">Alle Status</option>
+                          <option value="guest"  {{ ($statusFilter ?? '') === 'guest'  ? 'selected' : '' }}>Schnuppergäste (alle)</option>
                           <option value="green"  {{ ($statusFilter ?? '') === 'green'  ? 'selected' : '' }}>Zutritt OK</option>
-                          <option value="blue"   {{ ($statusFilter ?? '') === 'blue'   ? 'selected' : '' }}>Schnuppergast</option>
                           <option value="orange" {{ ($statusFilter ?? '') === 'orange' ? 'selected' : '' }}>Freigabe nötig</option>
                           <option value="red"    {{ ($statusFilter ?? '') === 'red'    ? 'selected' : '' }}>Gesperrt</option>
                       </select>
@@ -293,12 +293,12 @@
                                         </span>
                                     </td>
                                     <td class="px-4 py-3">
-                                        @if($reg->qrtoken)
-                                            <a href="{{ route('verify.checkin', $reg->qrtoken) }}"
+                                        @if($reg->qr_token)
+                                            <a href="{{ route('verify.checkin', $reg->qr_token) }}"
                                                target="_blank"
                                                class="font-mono text-xs text-indigo-600 hover:text-indigo-800 hover:underline break-all"
-                                               title="{{ route('verify.checkin', $reg->qrtoken) }}">
-                                                {{ $reg->qrtoken }}
+                                               title="{{ route('verify', $reg->qr_token) }}">
+                                                {{ $reg->qr_token }}
                                             </a>
                                         @else
                                             <span class="text-gray-300 text-xs">–</span>
