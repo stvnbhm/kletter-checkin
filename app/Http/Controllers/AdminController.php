@@ -24,7 +24,7 @@ class AdminController extends Controller
                 $q->where(function ($sub) use ($query) {
                     $sub->where('first_name',    'like', '%' . $query . '%')
                         ->orWhere('last_name',   'like', '%' . $query . '%')
-                        ->orWhere('member_typenumber','like', '%' . $query . '%');
+                        ->orWhere('member_number','like', '%' . $query . '%');
                 });
             })
             ->when($statusFilter, function ($q) use ($statusFilter) {
