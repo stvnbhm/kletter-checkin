@@ -181,9 +181,9 @@
                         $lastCheckin    = $registration->checkins()->latest('checked_in_at')->first();
                         $pastCheckinDates = null;
 
-                        if ($registration->membertype === 'guest' && $visits > 0) {
+                        if ($registration->member_type === 'guest' && $visits > 0) {
                             $pastCheckinDates = $registration->checkins
-                                ->sortBy('checkedinat')
+                                ->sortBy('checked_in_at')
                                 ->map(fn($c) => $c->checked_in_at->format('d.m.Y'))
                                 ->implode(' und am ');
                         }
