@@ -7085,228 +7085,6 @@ Route::middleware('admin')->prefix('admin')->name('admin.')->group(function () {
 require __DIR__ . '/auth.php';
 ````
 
-## File: app/Http/Controllers/StaffController.php
-````php
-<?php
-
-namespace App\Http\Controllers;
-
-use App\Models\Checkin;
-use App\Models\Registration;
-use Carbon\Carbon;
-use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
-
-class StaffController extends Controller
-{
-    public function index(Request $request)
-    {
-        $query = $request->input('q');
-
-        $registrations = Registration::with('member', 'currentCheckin')
-            ->when($query, function ($q) use ($query) {
-                $q->where(function ($sub) use ($query) {
-                    $sub->where('first_name', 'like', '%' . $query . '%')
-                        ->orWhere('last_name', 'like', '%' . $query . '%')
-                        ->orWhere('member_number', 'like', '%' . $query . '%');
-                });
-            })
-            ->orderByDesc('created_at')
-            ->get()
-            ->sortByDesc(fn($r) => $r->currentCheckin?->checked_in_at?->timestamp ?? 0);
-
-        $stats = [
-            'checkedInToday'     => Checkin::whereDate('checked_in_at', today())->count(),
-            'guestsToday'        => Checkin::whereDate('checked_in_at', today())
-                                        ->whereHas('registration', fn($q) => $q->where('member_type', 'guest'))
-                                        ->count(),
-            'membersToday'       => Checkin::whereDate('checked_in_at', today())
-                                        ->whereHas('registration', fn($q) => $q->where('member_type', 'member'))
-                                        ->count(),
-            'totalRegistrations' => Registration::count(),
-        ];
-
-        return view('staff.index', compact('registrations', 'query', 'stats'));
-    }
-
-    public function checkin(Registration $registration): RedirectResponse
-    {
-        $registration->load('currentCheckin', 'member');
-
-        // Bereits eingecheckt?
-        if ($registration->currentCheckin) {
-            return redirect()->route('staff')
-                ->with('error', $registration->first_name . ' ' . $registration->last_name . ' ist bereits eingecheckt.');
-        }
-
-        $visits = $registration->trial_visits_count ?? 0;
-
-        // ── HART GESPERRT ──────────────────────────────────────────────
-        if ($registration->access_status === 'red') {
-            return redirect()->route('staff')
-                ->with('error', 'Check-in verweigert – ' . $registration->first_name . ' hat keinen Zutritt (Status: rot).');
-        }
-
-        // Schnuppergast ab Besuch 4 (3 bereits absolviert) → gesperrt
-        if ($registration->member_type === 'guest' && $visits >= 3) {
-            return redirect()->route('staff')
-                ->with('error', 'Check-in verweigert – Schnupperlimit (3 Besuche) ausgeschöpft.');
-        }
-
-        // ── MODAL ERFORDERLICH ─────────────────────────────────────────
-        // Orange → modal-pflicht
-        // Schnuppergast ab Besuch 2 (visits >= 1) → modal-pflicht
-        $requiresModal = $registration->access_status === 'orange'
-                      || ($registration->member_type === 'guest' && $visits >= 1);
-
-        $reason = strip_tags(request('reason', ''));
-
-        if ($requiresModal && $reason === '') {
-            return redirect()->route('staff')
-                ->with('error', 'Check-in verweigert – Bestätigung mit Grund erforderlich.');
-        }
-
-        // ── UNVERIFIED MEMBER: max. 3 Check-ins ───────────────────────
-        $isUnverifiedMember = $registration->member_type === 'member'
-                           && $registration->member === null;
-
-        if ($isUnverifiedMember) {
-            $totalCheckins = Checkin::where('registration_id', $registration->id)->count();
-            if ($totalCheckins >= 3) {
-                $registration->update([
-                    'access_status' => 'red',
-                    'access_reason' => 'Mitgliedsnummer nicht im System – Limit erreicht',
-                ]);
-                return redirect()->route('staff')
-                    ->with('error', 'Check-in verweigert – Mitgliedsnummer nicht gefunden. Limit von 3 Besuchen ausgeschöpft.');
-            }
-        }
-
-        // ── CHECK-IN DURCHFÜHREN ───────────────────────────────────────
-                // ── CHECK-IN DURCHFÜHREN ───────────────────────────────────────
-        if ($reason !== '') {
-            $registration->update([
-                'manual_exception_reason' => $reason,
-            ]);
-        }
-
-        Checkin::create([
-            'registration_id' => $registration->id,
-            'checked_in_at'   => now(),
-        ]);
-
-        $registration->increment('trial_visits_count');
-        $registration->refresh();
-
-        // Nach Check-in Status-Update Schnuppergast
-        if ($registration->member_type === 'guest') {
-            if ($registration->trial_visits_count >= 3) {
-                $registration->update([
-                    'access_status' => 'red',
-                    'access_reason' => 'Schnupperlimit ausgeschöpft (3/3)',
-                ]);
-            } else {
-                $registration->update([
-                    'access_status' => 'orange',
-                    'access_reason' => 'Schnupperklettern absolviert am ' . now()->format('d.m.Y'),
-                ]);
-            }
-        }
-
-
-        // Unverified Member nach 3 Besuchen → rot
-        if ($isUnverifiedMember) {
-            $totalCheckins = Checkin::where('registration_id', $registration->id)->count();
-            if ($totalCheckins >= 3) {
-                $registration->update([
-                    'access_status' => 'red',
-                    'access_reason' => 'Mitgliedsnummer nicht im System – Limit erreicht',
-                ]);
-            }
-        }
-
-        return redirect()->route('staff')
-            ->with('success', '✓ ' . $registration->first_name . ' ' . $registration->last_name . ' eingecheckt.');
-    }
-
-    public function checkoutAll(): RedirectResponse
-    {
-        $now = now();
-        $openCheckins = Checkin::whereNull('checked_out_at')->get();
-        $count = $openCheckins->count();
-
-        foreach ($openCheckins as $checkin) {
-            $checkin->update(['checked_out_at' => $now]);
-
-            $registration = Registration::with('member')->find($checkin->registration_id);
-            if (!$registration) continue;
-
-            $registration->update(['checked_in_at' => null]);
-
-            if ($registration->member_type === 'guest' && $registration->trial_visits_count >= 3) {
-                $registration->update([
-                    'access_status' => 'red',
-                    'access_reason' => 'Schnupperlimit ausgeschöpft (3/3)',
-                ]);
-            } elseif ($registration->member_type === 'guest' && $registration->trial_visits_count >= 1) {
-                $registration->update([
-                    'access_reason' => 'Schnupperklettern – bereits eingecheckt am '
-                        . $checkin->checked_in_at->format('d.m.Y \u\m H:i') . ' Uhr',
-                ]);
-            }
-
-            $isUnverifiedMember = $registration->member_type === 'member'
-                                && $registration->member === null;
-
-            if ($isUnverifiedMember && $registration->trial_visits_count >= 3) {
-                $registration->update([
-                    'access_status' => 'red',
-                    'access_reason' => 'Mitgliedsnummer nicht im System – Limit erreicht',
-                ]);
-            }
-        }
-
-        return redirect()->route('staff')
-            ->with('success', '✓ ' . $count . ' ' . ($count === 1 ? 'Person' : 'Personen') . ' ausgecheckt.');
-    }
-
-    public function confirmParentConsent(Registration $registration): RedirectResponse
-    {
-        $registration->update([
-            'parent_consent_received'    => true,
-            'parent_consent_received_at' => now(),
-            'needs_parent_consent'       => false,
-        ]);
-
-        return redirect()->route('staff')
-            ->with('success', 'Einverständniserklärung wurde bestätigt.');
-    }
-
-    public function importMembers(Request $request): RedirectResponse
-    {
-        return redirect()->route('staff')
-            ->with('error', 'Import bitte über den Admin-Bereich durchführen.');
-    }
-
-    private function parseCsvDate(?string $value): ?Carbon
-    {
-        $value = trim((string) $value);
-        if ($value === '') return null;
-        try {
-            return Carbon::createFromFormat('d.m.Y', $value);
-        } catch (\Throwable) {
-            return null;
-        }
-    }
-
-    private function nullIfEmpty(?string $value): ?string
-    {
-        $value = trim((string) $value);
-        return $value === '' ? null : $value;
-    }
-}
-````
-
 ## File: resources/views/admin/index.blade.php
 ````php
 <!DOCTYPE html>
@@ -7516,10 +7294,46 @@ class StaffController extends Controller
 
             {{-- ── Registrierungen Tabelle ─────────────────────────── --}}
             <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                    <h3 class="text-lg font-semibold text-gray-700">👥 Alle Registrierungen</h3>
-                    <span class="text-sm text-gray-400">{{ $registrations->total() }} gesamt</span>
+              <div class="px-6 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                      <h3 class="text-lg font-semibold text-gray-700">Alle Registrierungen</h3>
+                      <span class="text-sm text-gray-400">{{ $registrations->total() }} gesamt</span>
+                  </div>
+                  <form method="GET" action="{{ route('admin.index') }}" class="flex flex-wrap gap-2 items-center">
+                      <input
+                          type="text"
+                          name="q"
+                          value="{{ $query ?? '' }}"
+                          placeholder="Name oder Mitgliedsnr. suchen…"
+                          class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 w-52"
+                      >
+                      <select name="status" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                          <option value="">Alle Status</option>
+                          <option value="green"  {{ ($statusFilter ?? '') === 'green'  ? 'selected' : '' }}>Zutritt OK</option>
+                          <option value="blue"   {{ ($statusFilter ?? '') === 'blue'   ? 'selected' : '' }}>Schnuppergast</option>
+                          <option value="orange" {{ ($statusFilter ?? '') === 'orange' ? 'selected' : '' }}>Freigabe nötig</option>
+                          <option value="red"    {{ ($statusFilter ?? '') === 'red'    ? 'selected' : '' }}>Gesperrt</option>
+                      </select>
+                      <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-3 py-1.5 rounded-lg transition-colors">
+                          Suchen
+                      </button>
+                      @if($query || $statusFilter)
+                          <a href="{{ route('admin.index') }}" class="text-sm text-gray-500 hover:text-gray-700 px-2 py-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+                              ✕ Zurücksetzen
+                          </a>
+                      @endif
+                  </form>
                 </div>
+
+                {{-- VOR der Desktop-Tabelle, außerhalb beider @forelse --}}
+                @php
+                    $statusLabels = [
+                        'green'  => 'Zutritt OK',
+                        'blue'   => 'Schnuppergast',
+                        'orange' => 'Freigabe nötig',
+                        'red'    => 'Gesperrt',
+                    ];
+                @endphp
 
                 {{-- Desktop-Tabelle --}}
                 <div class="hidden md:block overflow-x-auto">
@@ -7530,6 +7344,7 @@ class StaffController extends Controller
                                 <th class="px-4 py-3 text-left">Typ</th>
                                 <th class="px-4 py-3 text-left">Mitgliedsnr.</th>
                                 <th class="px-4 py-3 text-left">Status</th>
+                                <th class="px-4 py-3 text-left">QR-Link</th>
                                 <th class="px-4 py-3 text-left">Check-ins</th>
                                 <th class="px-4 py-3 text-left">Registriert am</th>
                                 <th class="px-4 py-3 text-left">Aktion</th>
@@ -7538,15 +7353,17 @@ class StaffController extends Controller
                         <tbody class="divide-y divide-gray-50">
                             @forelse ($registrations as $reg)
                                 @php
-                                    $regName = e($reg->first_name . ' ' . $reg->last_name);
-                                    $deleteMsg = 'Registrierung von ' . $reg->first_name . ' ' . $reg->last_name . ' wirklich löschen? Alle Check-ins werden mitgelöscht.';
-                                    $statusColors = [
-                                        'green'  => 'bg-green-100 text-green-700',
-                                        'blue'   => 'bg-blue-100 text-blue-700',
-                                        'orange' => 'bg-orange-100 text-orange-700',
-                                        'red'    => 'bg-red-100 text-red-700',
-                                    ];
-                                    $statusCls = $statusColors[$reg->access_status] ?? 'bg-gray-100 text-gray-600';
+                                  $regName   = $reg->first_name . ' ' . $reg->last_name;
+                                  $deleteMsg = 'Registrierung von ' . $regName . ' wirklich löschen? Alle Check-ins werden mitgelöscht.';
+
+                                  $statusColors = [
+                                      'green'  => 'bg-green-100 text-green-700',
+                                      'blue'   => 'bg-blue-100 text-blue-700',
+                                      'orange' => 'bg-orange-100 text-orange-700',
+                                      'red'    => 'bg-red-100 text-red-700',
+                                  ];
+                                  $statusCls   = $statusColors[$reg->access_status]  ?? 'bg-gray-100 text-gray-600';
+                                  $statusLabel = $statusLabels[$reg->access_status]  ?? $reg->access_status;
                                 @endphp
                                 <tr class="hover:bg-gray-50 transition">
                                     <td class="px-4 py-3 font-medium text-gray-800">
@@ -7561,8 +7378,20 @@ class StaffController extends Controller
                                     <td class="px-4 py-3 text-gray-500">{{ $reg->member_number ?? '–' }}</td>
                                     <td class="px-4 py-3">
                                         <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {{ $statusCls }}">
-                                            {{ $reg->access_status }}
+                                            {{ $statusLabel }}
                                         </span>
+                                    </td>
+                                    <td class="px-4 py-3">
+                                        @if($reg->qrtoken)
+                                            <a href="{{ route('verify.checkin', $reg->qrtoken) }}"
+                                               target="_blank"
+                                               class="font-mono text-xs text-indigo-600 hover:text-indigo-800 hover:underline break-all"
+                                               title="{{ route('verify.checkin', $reg->qrtoken) }}">
+                                                {{ $reg->qrtoken }}
+                                            </a>
+                                        @else
+                                            <span class="text-gray-300 text-xs">–</span>
+                                        @endif
                                     </td>
                                     <td class="px-4 py-3 text-gray-600 tabular-nums">
                                         {{ $reg->checkins_count ?? $reg->checkins->count() }}
@@ -7587,7 +7416,7 @@ class StaffController extends Controller
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="7" class="px-4 py-10 text-center text-gray-400">
+                                    <td colspan="8" class="px-4 py-10 text-center text-gray-400">
                                         Noch keine Registrierungen vorhanden.
                                     </td>
                                 </tr>
@@ -7601,13 +7430,15 @@ class StaffController extends Controller
                     @forelse ($registrations as $reg)
                         @php
                             $deleteMsgMobile = 'Registrierung von ' . $reg->first_name . ' ' . $reg->last_name . ' wirklich löschen?';
+
                             $mobileStatusColors = [
                                 'green'  => 'text-green-600',
                                 'blue'   => 'text-blue-500',
                                 'orange' => 'text-orange-500',
                                 'red'    => 'text-red-500',
                             ];
-                            $mobileStatusCls = $mobileStatusColors[$reg->access_status] ?? 'text-gray-500';
+                            $mobileStatusCls   = $mobileStatusColors[$reg->access_status] ?? 'text-gray-500';
+                            $mobileStatusLabel = $statusLabels[$reg->access_status]       ?? $reg->access_status;
                         @endphp
                         <div class="px-4 py-4 flex items-start justify-between gap-3">
                             <div class="flex-1 min-w-0">
@@ -7619,9 +7450,8 @@ class StaffController extends Controller
                                     @if ($reg->member_number) · {{ $reg->member_number }} @endif
                                     · {{ $reg->checkins_count ?? $reg->checkins->count() }} Check-ins
                                 </div>
-                                <div class="text-xs font-medium mt-1 {{ $mobileStatusCls }}">
-                                    ● {{ $reg->access_status }}
-                                </div>
+                                <div class="text-xs font-medium mt-1 {{ $mobileStatusCls }}">{{ $mobileStatusLabel
+                                }}</div>
                             </div>
                             <form action="{{ route('admin.registrations.destroy', $reg) }}"
                                   method="POST"
@@ -7798,6 +7628,228 @@ class StaffController extends Controller
 </html>
 ````
 
+## File: app/Http/Controllers/StaffController.php
+````php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Checkin;
+use App\Models\Registration;
+use Carbon\Carbon;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+
+class StaffController extends Controller
+{
+    public function index(Request $request)
+    {
+        $query = $request->input('q');
+
+        $registrations = Registration::with('member', 'currentCheckin', 'checkins')
+            ->when($query, function ($q) use ($query) {
+                $q->where(function ($sub) use ($query) {
+                    $sub->where('first_name', 'like', '%' . $query . '%')
+                        ->orWhere('last_name', 'like', '%' . $query . '%')
+                        ->orWhere('member_number', 'like', '%' . $query . '%');
+                });
+            })
+            ->orderByDesc('created_at')
+            ->get()
+            ->sortByDesc(fn($r) => $r->currentCheckin?->checked_in_at?->timestamp ?? 0);
+
+        $stats = [
+            'checkedInToday'     => Checkin::whereDate('checked_in_at', today())->count(),
+            'guestsToday'        => Checkin::whereDate('checked_in_at', today())
+                                        ->whereHas('registration', fn($q) => $q->where('member_type', 'guest'))
+                                        ->count(),
+            'membersToday'       => Checkin::whereDate('checked_in_at', today())
+                                        ->whereHas('registration', fn($q) => $q->where('member_type', 'member'))
+                                        ->count(),
+            'totalRegistrations' => Registration::count(),
+        ];
+
+        return view('staff.index', compact('registrations', 'query', 'stats'));
+    }
+
+    public function checkin(Registration $registration): RedirectResponse
+    {
+        $registration->load('currentCheckin', 'member');
+
+        // Bereits eingecheckt?
+        if ($registration->currentCheckin) {
+            return redirect()->route('staff')
+                ->with('error', $registration->first_name . ' ' . $registration->last_name . ' ist bereits eingecheckt.');
+        }
+
+        $visits = $registration->trial_visits_count ?? 0;
+
+        // ── HART GESPERRT ──────────────────────────────────────────────
+        if ($registration->access_status === 'red') {
+            return redirect()->route('staff')
+                ->with('error', 'Check-in verweigert – ' . $registration->first_name . ' hat keinen Zutritt (Status: rot).');
+        }
+
+        // Schnuppergast ab Besuch 4 (3 bereits absolviert) → gesperrt
+        if ($registration->member_type === 'guest' && $visits >= 3) {
+            return redirect()->route('staff')
+                ->with('error', 'Check-in verweigert – Schnupperlimit (3 Besuche) ausgeschöpft.');
+        }
+
+        // ── MODAL ERFORDERLICH ─────────────────────────────────────────
+        // Orange → modal-pflicht
+        // Schnuppergast ab Besuch 2 (visits >= 1) → modal-pflicht
+        $requiresModal = $registration->access_status === 'orange'
+                      || ($registration->member_type === 'guest' && $visits >= 1);
+
+        $reason = strip_tags(request('reason', ''));
+
+        if ($requiresModal && $reason === '') {
+            return redirect()->route('staff')
+                ->with('error', 'Check-in verweigert – Bestätigung mit Grund erforderlich.');
+        }
+
+        // ── UNVERIFIED MEMBER: max. 3 Check-ins ───────────────────────
+        $isUnverifiedMember = $registration->member_type === 'member'
+                           && $registration->member === null;
+
+        if ($isUnverifiedMember) {
+            $totalCheckins = Checkin::where('registration_id', $registration->id)->count();
+            if ($totalCheckins >= 3) {
+                $registration->update([
+                    'access_status' => 'red',
+                    'access_reason' => 'Mitgliedsnummer nicht im System – Limit erreicht',
+                ]);
+                return redirect()->route('staff')
+                    ->with('error', 'Check-in verweigert – Mitgliedsnummer nicht gefunden. Limit von 3 Besuchen ausgeschöpft.');
+            }
+        }
+
+        // ── CHECK-IN DURCHFÜHREN ───────────────────────────────────────
+                // ── CHECK-IN DURCHFÜHREN ───────────────────────────────────────
+        if ($reason !== '') {
+            $registration->update([
+                'manual_exception_reason' => $reason,
+            ]);
+        }
+
+        Checkin::create([
+            'registration_id' => $registration->id,
+            'checked_in_at'   => now(),
+        ]);
+
+        $registration->increment('trial_visits_count');
+        $registration->refresh();
+
+        // Nach Check-in Status-Update Schnuppergast
+        if ($registration->member_type === 'guest') {
+            if ($registration->trial_visits_count >= 3) {
+                $registration->update([
+                    'access_status' => 'red',
+                    'access_reason' => 'Schnupperlimit ausgeschöpft (3/3)',
+                ]);
+            } else {
+                $registration->update([
+                    'access_status' => 'orange',
+                    'access_reason' => 'Schnupperklettern absolviert am ' . now()->format('d.m.Y'),
+                ]);
+            }
+        }
+
+
+        // Unverified Member nach 3 Besuchen → rot
+        if ($isUnverifiedMember) {
+            $totalCheckins = Checkin::where('registration_id', $registration->id)->count();
+            if ($totalCheckins >= 3) {
+                $registration->update([
+                    'access_status' => 'red',
+                    'access_reason' => 'Mitgliedsnummer nicht im System – Limit erreicht',
+                ]);
+            }
+        }
+
+        return redirect()->route('staff')
+            ->with('success', '✓ ' . $registration->first_name . ' ' . $registration->last_name . ' eingecheckt.');
+    }
+
+    public function checkoutAll(): RedirectResponse
+    {
+        $now = now();
+        $openCheckins = Checkin::whereNull('checked_out_at')->get();
+        $count = $openCheckins->count();
+
+        foreach ($openCheckins as $checkin) {
+            $checkin->update(['checked_out_at' => $now]);
+
+            $registration = Registration::with('member')->find($checkin->registration_id);
+            if (!$registration) continue;
+
+            $registration->update(['checked_in_at' => null]);
+
+            if ($registration->member_type === 'guest' && $registration->trial_visits_count >= 3) {
+                $registration->update([
+                    'access_status' => 'red',
+                    'access_reason' => 'Schnupperlimit ausgeschöpft (3/3)',
+                ]);
+            } elseif ($registration->member_type === 'guest' && $registration->trial_visits_count >= 1) {
+                $registration->update([
+                    'access_reason' => 'Schnupperklettern – bereits eingecheckt am '
+                        . $checkin->checked_in_at->format('d.m.Y \u\m H:i') . ' Uhr',
+                ]);
+            }
+
+            $isUnverifiedMember = $registration->member_type === 'member'
+                                && $registration->member === null;
+
+            if ($isUnverifiedMember && $registration->trial_visits_count >= 3) {
+                $registration->update([
+                    'access_status' => 'red',
+                    'access_reason' => 'Mitgliedsnummer nicht im System – Limit erreicht',
+                ]);
+            }
+        }
+
+        return redirect()->route('staff')
+            ->with('success', '✓ ' . $count . ' ' . ($count === 1 ? 'Person' : 'Personen') . ' ausgecheckt.');
+    }
+
+    public function confirmParentConsent(Registration $registration): RedirectResponse
+    {
+        $registration->update([
+            'parent_consent_received'    => true,
+            'parent_consent_received_at' => now(),
+            'needs_parent_consent'       => false,
+        ]);
+
+        return redirect()->route('staff')
+            ->with('success', 'Einverständniserklärung wurde bestätigt.');
+    }
+
+    public function importMembers(Request $request): RedirectResponse
+    {
+        return redirect()->route('staff')
+            ->with('error', 'Import bitte über den Admin-Bereich durchführen.');
+    }
+
+    private function parseCsvDate(?string $value): ?Carbon
+    {
+        $value = trim((string) $value);
+        if ($value === '') return null;
+        try {
+            return Carbon::createFromFormat('d.m.Y', $value);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private function nullIfEmpty(?string $value): ?string
+    {
+        $value = trim((string) $value);
+        return $value === '' ? null : $value;
+    }
+}
+````
+
 ## File: app/Http/Controllers/AdminController.php
 ````php
 <?php
@@ -7816,11 +7868,25 @@ use Illuminate\Http\RedirectResponse;
 class AdminController extends Controller
 {
     // ── Dashboard ──────────────────────────────────────────
-    public function index()
+    public function index(Request $request)
     {
+        $query        = $request->input('q');
+        $statusFilter = $request->input('status');
+
         $registrations = Registration::withCount('checkins')
+            ->when($query, function ($q) use ($query) {
+                $q->where(function ($sub) use ($query) {
+                    $sub->where('first_name',    'like', '%' . $query . '%')
+                        ->orWhere('last_name',   'like', '%' . $query . '%')
+                        ->orWhere('member_typenumber','like', '%' . $query . '%');
+                });
+            })
+            ->when($statusFilter, function ($q) use ($statusFilter) {
+                $q->where('access_status', $statusFilter);
+            })
             ->orderByDesc('created_at')
-            ->paginate(30);
+            ->paginate(30)
+            ->withQueryString(); // ← Filter bei Pagination beibehalten!
 
         $chartData = Checkin::select(
                 DB::raw('DATE(checked_in_at) as day'),
@@ -7850,7 +7916,9 @@ class AdminController extends Controller
             'inactive_members'    => Member::where('membership_status', 'inactive')->count(),
         ];
 
-        return view('admin.index', compact('registrations', 'labels', 'values', 'stats'));
+        return view('admin.index', compact(
+            'registrations', 'labels', 'values', 'stats', 'query', 'statusFilter'
+        ));
     }
 
     // ── Registrierung löschen ──────────────────────────────
@@ -8982,7 +9050,7 @@ class RegistrationController extends Controller
                                         '{{ $registration->access_status }}',
                                         {{ $nextCheckinTriggersRed ? 'true' : 'false' }},
                                         {{ $visits }},
-                                        '{{ $lastCheckin ? $lastCheckin->checked_in_at->format('d.m.Y H:i') : '' }}',
+                                        '{{ $pastCheckinDates ? $pastCheckinDates . ' Uhr' : '' }}',
                                         '{{ e($registration->manual_exception_reason ?? '') }}'
                                     )"
                                     class="w-full inline-flex items-center justify-center border border-transparent
@@ -9034,7 +9102,15 @@ class RegistrationController extends Controller
                                 @php
                                     $currentCheckin = $registration->currentCheckin;
                                     $visits         = $registration->trial_visits_count ?? 0;
-                                    $lastCheckin    = $registration->checkins()->latest('checked_in_at')->first();
+
+                                    // Statt nur $lastCheckin holst du alle bisherigen als formatierten Text:
+                                    $pastCheckinDates = '';
+                                    if ($registration->member_type === 'guest' && $visits > 0) {
+                                        $pastCheckinDates = $registration->checkins
+                                            ->sortBy('checked_in_at')
+                                            ->map(fn($c) => $c->checked_in_at->format('d.m.Y H:i'))
+                                            ->implode(' Uhr und am ');
+                                    }
 
                                     $isTrialMaxReached         = $registration->member_type === 'guest' && $visits >= 3;
                                     $isUnverifiedMemberBlocked = $registration->member_type === 'member'
@@ -9173,7 +9249,7 @@ class RegistrationController extends Controller
                                                     '{{ $registration->access_status }}',
                                                     {{ $nextCheckinTriggersRed ? 'true' : 'false' }},
                                                     {{ $visits }},
-                                                    '{{ $lastCheckin ? $lastCheckin->checked_in_at->format('d.m.Y H:i') : '' }}',
+                                                    '{{ $pastCheckinDates ? $pastCheckinDates . ' Uhr' : '' }}',
                                                     '{{ e($registration->manual_exception_reason ?? '') }}'
                                                 )"
                                                 class="w-full inline-flex items-center justify-center border border-transparent
@@ -9301,7 +9377,7 @@ class RegistrationController extends Controller
         document.body.classList.add('overflow-hidden');
     }
 
-    function openCheckinModal(form, reasonInput, name, reason, accessStatus, nextTriggersRed, visits, lastCheckin, lastKulanz) {
+    function openCheckinModal(form, reasonInput, name, reason, accessStatus, nextTriggersRed, visits, pastCheckinDates, lastKulanz) {
         const isTrialLimit = visits >= 1 && accessStatus !== 'orange';
 
         confirmForm = form;
@@ -9316,9 +9392,13 @@ class RegistrationController extends Controller
         document.getElementById('confirmModalText').textContent = label;
 
         // --- NEU: Direkt ⚠️ + Grund anzeigen ---
-        const displayReason = reason || (isTrialLimit ? 'Schnuppergast hat bereits einen Besuch absolviert.' : 'Kein spezifischer Grund angegeben');
-        document.getElementById('confirmOrangeReason').textContent = '⚠️ ' + displayReason;
+        const displayReason = isTrialLimit
+            ? (pastCheckinDates
+                ? `Schnupperklettern bereits absolviert am ${pastCheckinDates}`
+                : 'Schnuppergast hat bereits einen Besuch absolviert.')
+            : (reason || 'Kein spezifischer Grund angegeben');
 
+        document.getElementById('confirmOrangeReason').textContent = '⚠️ ' + displayReason;
         document.getElementById('confirmOrangeHint').classList.remove('hidden');
         document.getElementById('confirmOrangeKulanz').classList.remove('hidden');
 

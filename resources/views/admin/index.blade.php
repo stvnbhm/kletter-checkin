@@ -205,10 +205,46 @@
 
             {{-- ── Registrierungen Tabelle ─────────────────────────── --}}
             <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                    <h3 class="text-lg font-semibold text-gray-700">👥 Alle Registrierungen</h3>
-                    <span class="text-sm text-gray-400">{{ $registrations->total() }} gesamt</span>
+              <div class="px-6 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                      <h3 class="text-lg font-semibold text-gray-700">Alle Registrierungen</h3>
+                      <span class="text-sm text-gray-400">{{ $registrations->total() }} gesamt</span>
+                  </div>
+                  <form method="GET" action="{{ route('admin.index') }}" class="flex flex-wrap gap-2 items-center">
+                      <input
+                          type="text"
+                          name="q"
+                          value="{{ $query ?? '' }}"
+                          placeholder="Name oder Mitgliedsnr. suchen…"
+                          class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 w-52"
+                      >
+                      <select name="status" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                          <option value="">Alle Status</option>
+                          <option value="green"  {{ ($statusFilter ?? '') === 'green'  ? 'selected' : '' }}>Zutritt OK</option>
+                          <option value="blue"   {{ ($statusFilter ?? '') === 'blue'   ? 'selected' : '' }}>Schnuppergast</option>
+                          <option value="orange" {{ ($statusFilter ?? '') === 'orange' ? 'selected' : '' }}>Freigabe nötig</option>
+                          <option value="red"    {{ ($statusFilter ?? '') === 'red'    ? 'selected' : '' }}>Gesperrt</option>
+                      </select>
+                      <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-3 py-1.5 rounded-lg transition-colors">
+                          Suchen
+                      </button>
+                      @if($query || $statusFilter)
+                          <a href="{{ route('admin.index') }}" class="text-sm text-gray-500 hover:text-gray-700 px-2 py-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+                              ✕ Zurücksetzen
+                          </a>
+                      @endif
+                  </form>
                 </div>
+
+                {{-- VOR der Desktop-Tabelle, außerhalb beider @forelse --}}
+                @php
+                    $statusLabels = [
+                        'green'  => 'Zutritt OK',
+                        'blue'   => 'Schnuppergast',
+                        'orange' => 'Freigabe nötig',
+                        'red'    => 'Gesperrt',
+                    ];
+                @endphp
 
                 {{-- Desktop-Tabelle --}}
                 <div class="hidden md:block overflow-x-auto">
@@ -219,6 +255,7 @@
                                 <th class="px-4 py-3 text-left">Typ</th>
                                 <th class="px-4 py-3 text-left">Mitgliedsnr.</th>
                                 <th class="px-4 py-3 text-left">Status</th>
+                                <th class="px-4 py-3 text-left">QR-Link</th>
                                 <th class="px-4 py-3 text-left">Check-ins</th>
                                 <th class="px-4 py-3 text-left">Registriert am</th>
                                 <th class="px-4 py-3 text-left">Aktion</th>
@@ -227,15 +264,17 @@
                         <tbody class="divide-y divide-gray-50">
                             @forelse ($registrations as $reg)
                                 @php
-                                    $regName = e($reg->first_name . ' ' . $reg->last_name);
-                                    $deleteMsg = 'Registrierung von ' . $reg->first_name . ' ' . $reg->last_name . ' wirklich löschen? Alle Check-ins werden mitgelöscht.';
-                                    $statusColors = [
-                                        'green'  => 'bg-green-100 text-green-700',
-                                        'blue'   => 'bg-blue-100 text-blue-700',
-                                        'orange' => 'bg-orange-100 text-orange-700',
-                                        'red'    => 'bg-red-100 text-red-700',
-                                    ];
-                                    $statusCls = $statusColors[$reg->access_status] ?? 'bg-gray-100 text-gray-600';
+                                  $regName   = $reg->first_name . ' ' . $reg->last_name;
+                                  $deleteMsg = 'Registrierung von ' . $regName . ' wirklich löschen? Alle Check-ins werden mitgelöscht.';
+
+                                  $statusColors = [
+                                      'green'  => 'bg-green-100 text-green-700',
+                                      'blue'   => 'bg-blue-100 text-blue-700',
+                                      'orange' => 'bg-orange-100 text-orange-700',
+                                      'red'    => 'bg-red-100 text-red-700',
+                                  ];
+                                  $statusCls   = $statusColors[$reg->access_status]  ?? 'bg-gray-100 text-gray-600';
+                                  $statusLabel = $statusLabels[$reg->access_status]  ?? $reg->access_status;
                                 @endphp
                                 <tr class="hover:bg-gray-50 transition">
                                     <td class="px-4 py-3 font-medium text-gray-800">
@@ -250,8 +289,20 @@
                                     <td class="px-4 py-3 text-gray-500">{{ $reg->member_number ?? '–' }}</td>
                                     <td class="px-4 py-3">
                                         <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {{ $statusCls }}">
-                                            {{ $reg->access_status }}
+                                            {{ $statusLabel }}
                                         </span>
+                                    </td>
+                                    <td class="px-4 py-3">
+                                        @if($reg->qrtoken)
+                                            <a href="{{ route('verify.checkin', $reg->qrtoken) }}"
+                                               target="_blank"
+                                               class="font-mono text-xs text-indigo-600 hover:text-indigo-800 hover:underline break-all"
+                                               title="{{ route('verify.checkin', $reg->qrtoken) }}">
+                                                {{ $reg->qrtoken }}
+                                            </a>
+                                        @else
+                                            <span class="text-gray-300 text-xs">–</span>
+                                        @endif
                                     </td>
                                     <td class="px-4 py-3 text-gray-600 tabular-nums">
                                         {{ $reg->checkins_count ?? $reg->checkins->count() }}
@@ -276,7 +327,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="7" class="px-4 py-10 text-center text-gray-400">
+                                    <td colspan="8" class="px-4 py-10 text-center text-gray-400">
                                         Noch keine Registrierungen vorhanden.
                                     </td>
                                 </tr>
@@ -290,13 +341,16 @@
                     @forelse ($registrations as $reg)
                         @php
                             $deleteMsgMobile = 'Registrierung von ' . $reg->first_name . ' ' . $reg->last_name . ' wirklich löschen?';
+
                             $mobileStatusColors = [
                                 'green'  => 'text-green-600',
                                 'blue'   => 'text-blue-500',
                                 'orange' => 'text-orange-500',
                                 'red'    => 'text-red-500',
                             ];
-                            $mobileStatusCls = $mobileStatusColors[$reg->access_status] ?? 'text-gray-500';
+                            $mobileStatusCls   = $mobileStatusColors[$reg->access_status] ?? 'text-gray-500';
+                            $mobileStatusLabel = $statusLabels[$reg->access_status]       ?? $reg->access_status;
+                            $deleteMsgMobile = 'Registrierung von ' . $reg->firstname . ' ' . $reg->lastname . ' wirklich löschen? Alle Check-ins werden mitgelöscht.';
                         @endphp
                         <div class="px-4 py-4 flex items-start justify-between gap-3">
                             <div class="flex-1 min-w-0">
@@ -308,9 +362,8 @@
                                     @if ($reg->member_number) · {{ $reg->member_number }} @endif
                                     · {{ $reg->checkins_count ?? $reg->checkins->count() }} Check-ins
                                 </div>
-                                <div class="text-xs font-medium mt-1 {{ $mobileStatusCls }}">
-                                    ● {{ $reg->access_status }}
-                                </div>
+                                <div class="text-xs font-medium mt-1 {{ $mobileStatusCls }}">{{ $mobileStatusLabel
+                                }}</div>
                             </div>
                             <form action="{{ route('admin.registrations.destroy', $reg) }}"
                                   method="POST"

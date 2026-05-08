@@ -14,11 +14,25 @@ use Illuminate\Http\RedirectResponse;
 class AdminController extends Controller
 {
     // ── Dashboard ──────────────────────────────────────────
-    public function index()
+    public function index(Request $request)
     {
+        $query        = $request->input('q');
+        $statusFilter = $request->input('status');
+
         $registrations = Registration::withCount('checkins')
+            ->when($query, function ($q) use ($query) {
+                $q->where(function ($sub) use ($query) {
+                    $sub->where('first_name',    'like', '%' . $query . '%')
+                        ->orWhere('last_name',   'like', '%' . $query . '%')
+                        ->orWhere('member_typenumber','like', '%' . $query . '%');
+                });
+            })
+            ->when($statusFilter, function ($q) use ($statusFilter) {
+                $q->where('access_status', $statusFilter);
+            })
             ->orderByDesc('created_at')
-            ->paginate(30);
+            ->paginate(30)
+            ->withQueryString(); // ← Filter bei Pagination beibehalten!
 
         $chartData = Checkin::select(
                 DB::raw('DATE(checked_in_at) as day'),
@@ -48,7 +62,9 @@ class AdminController extends Controller
             'inactive_members'    => Member::where('membership_status', 'inactive')->count(),
         ];
 
-        return view('admin.index', compact('registrations', 'labels', 'values', 'stats'));
+        return view('admin.index', compact(
+            'registrations', 'labels', 'values', 'stats', 'query', 'statusFilter'
+        ));
     }
 
     // ── Registrierung löschen ──────────────────────────────
