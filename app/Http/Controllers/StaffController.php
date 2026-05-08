@@ -162,7 +162,7 @@ class StaffController extends Controller
             } elseif ($registration->member_type === 'guest' && $registration->trial_visits_count >= 1) {
                 $registration->update([
                     'access_reason' => 'Schnupperklettern bereits absolviert am '
-                        . $checkin->checked_in_at->format('d.m.Y \u\m'),
+                        . $checkin->checked_in_at->format('d.m.Y'),
                 ]);
             }
 
