@@ -96,23 +96,33 @@
                     </button>
                 </div>
                 <div class="p-4">
-                    <div class="mb-3 flex items-center gap-3">
-                        <label for="camera-select" class="text-xs text-gray-500 whitespace-nowrap">Kamera:</label>
-                        <select id="camera-select"
-                            class="flex-1 border border-gray-300 rounded-md px-2 py-1.5 text-sm
-                                   bg-white text-gray-900 focus:border-indigo-500 focus:ring-indigo-500">
-                            <option value="">Wird geladen…</option>
-                        </select>
-                        <button onclick="startScanner()"
-                            class="inline-flex items-center bg-indigo-600 text-white rounded-md
-                                   px-3 py-1.5 text-xs font-semibold hover:bg-indigo-700 transition">
-                            Starten
-                        </button>
-                        <button onclick="stopScanner()"
-                            class="inline-flex items-center bg-white border border-gray-300 text-gray-700
-                                   rounded-md px-3 py-1.5 text-xs font-semibold hover:bg-gray-50 transition">
-                            Stopp
-                        </button>
+                    {{-- Container: Auf Mobile untereinander (flex-col), ab Tablet nebeneinander (sm:flex-row) --}}
+                    <div class="mb-3 flex flex-col sm:flex-row sm:items-center gap-3">
+                        
+                        {{-- Gruppe 1: Label + Select --}}
+                        <div class="flex items-center gap-3 flex-1">
+                            <label for="camera-select" class="text-xs text-gray-500 whitespace-nowrap">Kamera:</label>
+                            <select id="camera-select"
+                                class="flex-1 border border-gray-300 rounded-md px-2 py-1.5 text-sm
+                                       bg-white text-gray-900 focus:border-indigo-500 focus:ring-indigo-500">
+                                <option value="">Wird geladen…</option>
+                            </select>
+                        </div>
+                
+                        {{-- Gruppe 2: Starten + Stopp Buttons --}}
+                        <div class="flex items-center gap-2">
+                            <button onclick="startScanner()"
+                                class="flex-1 sm:flex-none justify-center inline-flex items-center bg-indigo-600 text-white rounded-md
+                                       px-3 py-1.5 text-xs font-semibold hover:bg-indigo-700 transition">
+                                Starten
+                            </button>
+                            <button onclick="stopScanner()"
+                                class="flex-1 sm:flex-none justify-center inline-flex items-center bg-white border border-gray-300 text-gray-700
+                                       rounded-md px-3 py-1.5 text-xs font-semibold hover:bg-gray-50 transition">
+                                Stopp
+                            </button>
+                        </div>
+                        
                     </div>
                     <div id="qr-reader"
                          class="rounded-lg overflow-hidden border border-gray-200 bg-gray-900"
