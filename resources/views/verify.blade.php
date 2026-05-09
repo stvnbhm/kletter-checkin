@@ -34,35 +34,40 @@
             </div>
 
             @php
-                $currentCheckin = $registration->currentCheckin;
+    $currentCheckin = $registration->currentCheckin;
 
-                $colors = [
-                    'green'  => ['bg' => 'bg-green-50',   'border' => 'border-green-500',  'text' => 'text-green-800',  'icon' => '✅', 'label' => 'Zutritt OK'],
-                    'blue'   => ['bg' => 'bg-blue-50',    'border' => 'border-blue-500',   'text' => 'text-blue-800',   'icon' => '🔵', 'label' => 'Schnupperklettern'],
-                    'orange' => ['bg' => 'bg-orange-50',  'border' => 'border-orange-500', 'text' => 'text-orange-800', 'icon' => '⚠️', 'label' => 'Bitte beim Hallendienst melden'],
-                    'red'    => ['bg' => 'bg-red-50',     'border' => 'border-red-500',    'text' => 'text-red-800',    'icon' => '🚫', 'label' => 'Kein Zutritt'],
-                ];
-                $displayStatus = ($currentCheckin) ? 'green' : $registration->access_status;
-                $c = $colors[$registration->access_status] ?? $colors['red'];
+    $colors = [
+        'green'  => ['bg' => 'bg-green-50',   'border' => 'border-green-500',  'text' => 'text-green-800',  'icon' => '✅', 'label' => 'Zutritt OK'],
+        'blue'   => ['bg' => 'bg-blue-50',    'border' => 'border-blue-500',   'text' => 'text-blue-800',   'icon' => '🔵', 'label' => 'Schnupperklettern'],
+        'orange' => ['bg' => 'bg-orange-50',  'border' => 'border-orange-500', 'text' => 'text-orange-800', 'icon' => '⚠️', 'label' => 'Bitte beim Hallendienst melden'],
+        'red'    => ['bg' => 'bg-red-50',     'border' => 'border-red-500',    'text' => 'text-red-800',    'icon' => '🚫', 'label' => 'Kein Zutritt'],
+    ];
+    
+    $c = $colors[$registration->access_status] ?? $colors['red'];
 
-                // Prüfen ob Check-in blockiert werden muss (Status Rot oder Orange ohne aktive Kulanz)
-                $hasActiveKulanz = $registration->manual_exception_until && $registration->manual_exception_until->isFuture();
-                $isTrialUsed = $registration->access_status === 'blue'
-                   && ($registration->trial_visits_count ?? 0) >= 1
-                   && !$hasActiveKulanz;
+    // Prüfen ob Check-in blockiert werden muss (Status Rot oder Orange ohne aktive Kulanz)
+    $hasActiveKulanz = $registration->manual_exception_until && $registration->manual_exception_until->isFuture();
+    $isTrialUsed = $registration->access_status === 'blue'
+       && ($registration->trial_visits_count ?? 0) >= 1
+       && !$hasActiveKulanz;
 
-                $isBlocked = !in_array($registration->access_status, ['green', 'blue']) || $isTrialUsed;
-            @endphp
+    $isBlocked = !in_array($registration->access_status, ['green', 'blue']) || $isTrialUsed;
+@endphp
 
-            <div class="bg-white rounded-xl border-2 {{ $c['border'] }} {{ $c['bg'] }} p-6 mb-6 text-center shadow-sm">
-                <div class="text-5xl mb-3">{{ $c['icon'] }}</div>
-                <div class="text-2xl font-bold {{ $c['text'] }}">{{ $c['label'] }}</div>
-                @if($registration->access_reason && !$currentCheckin)
-                    <div class="mt-2 text-sm {{ $c['text'] }} opacity-80 font-medium">
-                        {{ $registration->access_reason }}
-                    </div>
-                @endif
-            </div>
+{{-- Status-Kasten NUR anzeigen, wenn noch NICHT eingecheckt --}}
+@if(!$currentCheckin)
+<div class="bg-white rounded-xl border-2 {{ $c['border'] }} {{ $c['bg'] }} p-6 mb-6 text-center shadow-sm">
+    <div class="text-5xl mb-3">{{ $c['icon'] }}</div>
+    <div class="text-2xl font-bold {{ $c['text'] }}">{{ $c['label'] }}</div>
+    
+    @if($registration->access_reason)
+        <div class="mt-2 text-sm {{ $c['text'] }} opacity-80 font-medium">
+            {{ $registration->access_reason }}
+        </div>
+    @endif
+</div>
+@endif
+
 
             <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
                 <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4">Deine Registrierung</h3>
