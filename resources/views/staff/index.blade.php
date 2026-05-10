@@ -69,6 +69,7 @@
                                   d="M4 4h6v6H4V4zm0 10h6v6H4v-6zm10-10h6v6h-6V4zm4 10h2v2h-2v-2zm-4 0h2v2h-2v-2zm0 4h2v2h-2v-2zm4-2h2v2h-2v-2zm0 4h2v2h-2v-2z"/>
                         </svg>
                         QR-Code scannen
+                        <span class="hidden md:inline text-xs font-normal text-indigo-100">(F2)</span>
                     </button>
 
                 </div>
@@ -766,12 +767,104 @@
             if (e.key === 'Escape') closeConfirmModal();
         });
 
+        // Desktop-Shortcut: Scanner starten (F2)
+        document.addEventListener('keydown', async function (e) {
+            if (e.repeat) return;
+            if (e.key !== 'F2') return;
+            if (!window.matchMedia('(min-width: 768px)').matches) return;
+
+            const confirmModal = document.getElementById('confirmModal');
+            if (confirmModal && !confirmModal.classList.contains('hidden')) return;
+
+            const active = document.activeElement;
+            const isTypingTarget = active && (
+                active.tagName === 'INPUT' ||
+                active.tagName === 'TEXTAREA' ||
+                active.tagName === 'SELECT' ||
+                active.isContentEditable
+            );
+            if (isTypingTarget) return;
+
+            e.preventDefault();
+            await unlockScannerAudio();
+            const panel = document.getElementById('qr-scanner-panel');
+            if (panel.classList.contains('hidden')) {
+                toggleScanner();
+                return;
+            }
+            startScanner();
+        });
+
+        const unlockEvents = ['pointerdown', 'touchstart', 'keydown'];
+        const unlockOnce = () => {
+            unlockScannerAudio();
+            unlockEvents.forEach(eventName => {
+                window.removeEventListener(eventName, unlockOnce);
+            });
+        };
+        unlockEvents.forEach(eventName => {
+            window.addEventListener(eventName, unlockOnce, { once: true });
+        });
+
     });
 
     // ── QR-Scanner ─────────────────────────────────────────────────────────
     let html5QrCode   = null;
     let scannerRunning = false;
     let lastScanned   = null;
+    let scannerAudioContext = null;
+    let scannerAudioUnlocked = false;
+
+    function ensureScannerAudioContext() {
+        if (!scannerAudioContext) {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) return null;
+            scannerAudioContext = new AudioCtx();
+        }
+        return scannerAudioContext;
+    }
+
+    async function unlockScannerAudio() {
+        const ctx = ensureScannerAudioContext();
+        if (!ctx) return;
+        if (ctx.state === 'suspended') {
+            try { await ctx.resume(); } catch (_) {}
+        }
+        scannerAudioUnlocked = ctx.state === 'running';
+    }
+
+    function playScannerFeedback(type) {
+        const ctx = ensureScannerAudioContext();
+        if (!ctx) return;
+        if (!scannerAudioUnlocked || ctx.state !== 'running') return;
+
+        const now = ctx.currentTime + 0.02;
+        const steps = type === 'success'
+            ? [
+                { freq: 720, duration: 0.06, gain: 0.055 },
+                { freq: 930, duration: 0.08, gain: 0.045 },
+            ]
+            : [
+                { freq: 340, duration: 0.12, gain: 0.05 },
+                { freq: 280, duration: 0.12, gain: 0.04 },
+            ];
+
+        let cursor = now;
+        steps.forEach(step => {
+            const oscillator = ctx.createOscillator();
+            const gainNode = ctx.createGain();
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(step.freq, cursor);
+            gainNode.gain.setValueAtTime(0.0001, cursor);
+            gainNode.gain.exponentialRampToValueAtTime(step.gain, cursor + 0.01);
+            gainNode.gain.exponentialRampToValueAtTime(0.0001, cursor + step.duration);
+            oscillator.connect(gainNode);
+            gainNode.connect(ctx.destination);
+            oscillator.start(cursor);
+            oscillator.stop(cursor + step.duration);
+            cursor += step.duration + 0.02;
+        });
+    }
 
     function toggleScanner() {
         const panel = document.getElementById('qr-scanner-panel');
@@ -810,6 +903,7 @@
     }
 
     async function startScanner() {
+        await unlockScannerAudio();
         const cameraId = document.getElementById('camera-select').value;
         if (!cameraId) { showStatus('Bitte zuerst eine Kamera auswählen.', 'error'); return; }
         if (scannerRunning) await stopScanner();
@@ -871,6 +965,7 @@
         }
         if (response.status === 404) {
             showStatus('⚠ QR-Code nicht erkannt – ungültiger oder abgelaufener Code.', 'error');
+            playScannerFeedback('deny');
             setTimeout(() => { try { html5QrCode.resume(); } catch (_) {} }, 3000);
             return;
         }
@@ -883,9 +978,11 @@
 
         if (response.ok && data.success) {
             showStatus('✓ ' + data.message, 'success');
+            playScannerFeedback('success');
             setTimeout(() => window.location.reload(), 1800);
         } else {
             showStatus('⚠ ' + (data.message ?? 'Unbekannter Fehler'), 'error');
+            playScannerFeedback('deny');
             setTimeout(() => { try { html5QrCode.resume(); } catch (_) {} }, 3000);
         }
     }
