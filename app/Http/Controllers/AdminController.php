@@ -18,14 +18,22 @@ class AdminController extends Controller
     {
         $query        = $request->input('q');
         $statusFilter = $request->input('status');
+        $searchTerms  = collect(explode(',', (string) $query))
+            ->map(fn (string $term): string => trim($term))
+            ->filter()
+            ->values();
 
         $registrations = Registration::withCount('checkins')
-            ->when($query, function ($q) use ($query) {
-                $q->where(function ($sub) use ($query) {
-                    $sub->where('first_name',    'like', '%' . $query . '%')
-                        ->orWhere('last_name',   'like', '%' . $query . '%')
-                        ->orWhere('member_number','like', '%' . $query . '%')
-                        ->orWhere('notes',       'like', '%' . $query . '%');
+            ->when($searchTerms->isNotEmpty(), function ($q) use ($searchTerms) {
+                $q->where(function ($group) use ($searchTerms) {
+                    foreach ($searchTerms as $term) {
+                        $group->orWhere(function ($sub) use ($term) {
+                            $sub->where('first_name',     'like', '%' . $term . '%')
+                                ->orWhere('last_name',    'like', '%' . $term . '%')
+                                ->orWhere('member_number', 'like', '%' . $term . '%')
+                                ->orWhere('notes',        'like', '%' . $term . '%');
+                        });
+                    }
                 });
             })
             ->when($statusFilter, function ($q) use ($statusFilter) {

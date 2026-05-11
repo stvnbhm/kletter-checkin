@@ -71,3 +71,43 @@ test('staff list finds registrations by notes', function () {
     $response->assertOk();
     $response->assertSee('Einsteiger Dienstag');
 });
+
+test('admin list can search multiple comma separated names', function () {
+    $admin = User::factory()->create();
+    $admin->is_admin = true;
+    $admin->save();
+
+    Registration::create([
+        'first_name' => 'Anna',
+        'last_name' => 'Muster',
+        'member_type' => 'guest',
+        'access_status' => 'green',
+        'qr_token' => (string) Str::uuid(),
+        'trial_visits_count' => 0,
+    ]);
+
+    Registration::create([
+        'first_name' => 'Ben',
+        'last_name' => 'Beispiel',
+        'member_type' => 'guest',
+        'access_status' => 'green',
+        'qr_token' => (string) Str::uuid(),
+        'trial_visits_count' => 0,
+    ]);
+
+    Registration::create([
+        'first_name' => 'Clara',
+        'last_name' => 'Andere',
+        'member_type' => 'guest',
+        'access_status' => 'green',
+        'qr_token' => (string) Str::uuid(),
+        'trial_visits_count' => 0,
+    ]);
+
+    $response = $this->actingAs($admin)->get(route('admin.index', ['q' => 'Anna, Ben']));
+
+    $response->assertOk();
+    $response->assertSee('Anna Muster');
+    $response->assertSee('Ben Beispiel');
+    $response->assertDontSee('Clara Andere');
+});

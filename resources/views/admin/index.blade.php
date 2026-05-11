@@ -215,7 +215,7 @@
                           type="text"
                           name="q"
                           value="{{ $query ?? '' }}"
-                          placeholder="Name, Mitgliedsnr. oder Notiz …"
+                          placeholder="Namen (mit Komma), Mitgliedsnr. oder Notiz …"
                           class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 w-52"
                       >
                       <select name="status" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400">
