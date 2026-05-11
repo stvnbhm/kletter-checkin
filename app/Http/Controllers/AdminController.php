@@ -24,7 +24,8 @@ class AdminController extends Controller
                 $q->where(function ($sub) use ($query) {
                     $sub->where('first_name',    'like', '%' . $query . '%')
                         ->orWhere('last_name',   'like', '%' . $query . '%')
-                        ->orWhere('member_number','like', '%' . $query . '%');
+                        ->orWhere('member_number','like', '%' . $query . '%')
+                        ->orWhere('notes',       'like', '%' . $query . '%');
                 });
             })
             ->when($statusFilter, function ($q) use ($statusFilter) {
@@ -78,6 +79,25 @@ class AdminController extends Controller
         $registration->delete();
 
         return back()->with('success', 'Registrierung wurde gelöscht.');
+    }
+
+    public function updateRegistrationNotes(Request $request, Registration $registration): RedirectResponse
+    {
+        $validated = $request->validate([
+            'notes' => ['nullable', 'string', 'max:65535'],
+        ]);
+
+        $raw = $validated['notes'] ?? '';
+        $trimmed = is_string($raw) ? trim($raw) : '';
+        $registration->update(['notes' => $trimmed === '' ? null : $trimmed]);
+
+        $queryParams = array_filter(
+            $request->only(['q', 'status', 'page']),
+            fn ($v) => $v !== null && $v !== ''
+        );
+
+        return redirect()->route('admin.index', $queryParams)
+            ->with('success', 'Notiz gespeichert.');
     }
 
     // ── Mitglieder CSV-Import ──────────────────────────────

@@ -45,6 +45,9 @@
                           action="{{ route('staff.checkout-all') }}"
                           onsubmit="askConfirm('Alle aktuell eingecheckten Personen wirklich auschecken?', this); return false;">
                         @csrf
+                        @if(filled($query ?? null))
+                            <input type="hidden" name="q" value="{{ $query }}">
+                        @endif
                         <button type="submit"
                             class="inline-flex items-center gap-2 bg-white border border-gray-300 text-gray-700
                                    rounded-lg px-4 py-2 text-sm font-semibold
@@ -159,7 +162,7 @@
                     class="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3">
                     <div class="flex-1 min-w-0 sm:min-w-[280px]">
                         <input type="text" name="q" value="{{ $query }}"
-                            placeholder="Name oder Mitgliedsnummer suchen"
+                            placeholder="Name, Mitgliedsnummer oder Notiz suchen"
                             class="block w-full border border-gray-300 rounded-lg px-3 py-2 text-sm
                                    bg-white text-gray-900 focus:border-indigo-500 focus:ring-indigo-500">
                     </div>
@@ -260,6 +263,11 @@
                                         · {{ $registration->member_number }}
                                     @endif
                                 </div>
+                                @if(filled($registration->notes))
+                                    <div class="text-xs text-indigo-600 mt-1 font-medium">
+                                        {{ $registration->notes }}
+                                    </div>
+                                @endif
                             </div>
                             <div class="flex flex-col items-end gap-1 shrink-0">
                                 @if ($currentCheckin)
@@ -288,6 +296,9 @@
                                     @else
                                         <form method="POST" action="{{ route('staff.parent-consent', $registration) }}" class="inline">
                                             @csrf
+                                            @if(filled($query ?? null))
+                                                <input type="hidden" name="q" value="{{ $query }}">
+                                            @endif
                                             <button type="submit"
                                                 class="underline text-gray-600 bg-transparent border-none p-0 cursor-pointer text-xs">
                                                 Formular erhalten
@@ -319,6 +330,9 @@
                                 <form id="checkin-form-{{ $registration->id }}" method="POST"
                                       action="{{ route('staff.checkin', $registration) }}" class="hidden">
                                     @csrf
+                                    @if(filled($query ?? null))
+                                        <input type="hidden" name="q" value="{{ $query }}">
+                                    @endif
                                     <input type="text" name="reason" id="reason-{{ $registration->id }}">
                                 </form>
                                 <button type="button"
@@ -342,6 +356,9 @@
                             @else
                                 <form method="POST" action="{{ route('staff.checkin', $registration) }}">
                                     @csrf
+                                    @if(filled($query ?? null))
+                                        <input type="hidden" name="q" value="{{ $query }}">
+                                    @endif
                                     <button type="submit" class="w-full inline-flex items-center justify-center border border-transparent
                             	                                   bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold
                             	                                   hover:bg-indigo-700 transition min-h-[44px] touch-manipulation">
@@ -453,6 +470,11 @@
                                             {{ $registration->birth_date?->format('d.m.Y') ?? '—' }}
                                             · {{ $registration->member_type === 'guest' ? 'Gast' : 'Mitglied' }}
                                         </div>
+                                        @if(filled($registration->notes))
+                                            <div class="text-xs text-indigo-600 mt-1 font-medium max-w-xs">
+                                                {{ $registration->notes }}
+                                            </div>
+                                        @endif
                                     </td>
 
                                     <td class="px-4 py-4 align-top text-sm text-gray-600">
@@ -487,6 +509,9 @@
                                                   @else
                                                       <form method="POST" action="{{ route('staff.parent-consent', $registration) }}" class="inline">
                                                           @csrf
+                                                          @if(filled($query ?? null))
+                                                              <input type="hidden" name="q" value="{{ $query }}">
+                                                          @endif
                                                           <button type="submit"
                                                               class="underline text-gray-600 bg-transparent border-none p-0 cursor-pointer text-xs">
                                                               Formular erhalten
@@ -519,6 +544,9 @@
                                             <form id="checkin-form-{{ $registration->id }}" method="POST"
                                                   action="{{ route('staff.checkin', $registration) }}" class="hidden">
                                                 @csrf
+                                                @if(filled($query ?? null))
+                                                    <input type="hidden" name="q" value="{{ $query }}">
+                                                @endif
                                                 <input type="text" name="reason" id="reason-{{ $registration->id }}">
                                             </form>
                                             <button type="button"
@@ -542,6 +570,9 @@
                                         @else
                                             <form method="POST" action="{{ route('staff.checkin', $registration) }}">
                                                 @csrf
+                                                @if(filled($query ?? null))
+                                                    <input type="hidden" name="q" value="{{ $query }}">
+                                                @endif
                                                 <button type="submit" class="w-full inline-flex items-center justify-center border border-transparent
                                         	                                   bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold
                                         	                                   hover:bg-indigo-700 transition min-h-[44px] touch-manipulation">

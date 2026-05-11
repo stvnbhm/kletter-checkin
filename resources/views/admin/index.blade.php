@@ -215,7 +215,7 @@
                           type="text"
                           name="q"
                           value="{{ $query ?? '' }}"
-                          placeholder="Name oder Mitgliedsnr. suchen…"
+                          placeholder="Name, Mitgliedsnr. oder Notiz …"
                           class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 w-52"
                       >
                       <select name="status" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400">
@@ -258,6 +258,7 @@
                                 <th class="px-4 py-3 text-left">QR-Link</th>
                                 <th class="px-4 py-3 text-left">Check-ins</th>
                                 <th class="px-4 py-3 text-left">Registriert am</th>
+                                <th class="px-4 py-3 text-left min-w-[200px]">Notiz / Kurs</th>
                                 <th class="px-4 py-3 text-left">Aktion</th>
                             </tr>
                         </thead>
@@ -310,6 +311,30 @@
                                     <td class="px-4 py-3 text-gray-400 text-xs">
                                         {{ $reg->created_at->format('d.m.Y H:i') }}
                                     </td>
+                                    <td class="px-4 py-3 align-top">
+                                        <form action="{{ route('admin.registrations.notes', $reg) }}"
+                                              method="POST"
+                                              class="flex flex-col gap-1.5">
+                                            @csrf
+                                            @method('PATCH')
+                                            @if(filled($query ?? null))
+                                                <input type="hidden" name="q" value="{{ $query }}">
+                                            @endif
+                                            @if(filled($statusFilter ?? null))
+                                                <input type="hidden" name="status" value="{{ $statusFilter }}">
+                                            @endif
+                                            @if($registrations->currentPage() > 1)
+                                                <input type="hidden" name="page" value="{{ $registrations->currentPage() }}">
+                                            @endif
+                                            <textarea name="notes" rows="2" maxlength="65535"
+                                                class="w-full min-w-[160px] max-w-xs border border-gray-200 rounded-md px-2 py-1 text-xs text-gray-800 focus:ring-2 focus:ring-indigo-400 focus:outline-none resize-y"
+                                                placeholder="z. B. Kurs Mo 18:00">{{ $reg->notes }}</textarea>
+                                            <button type="submit"
+                                                class="self-start text-xs font-semibold text-indigo-600 hover:text-indigo-800 min-h-[36px] px-1 touch-manipulation">
+                                                Speichern
+                                            </button>
+                                        </form>
+                                    </td>
                                     <td class="px-4 py-3">
                                         <form action="{{ route('admin.registrations.destroy', $reg) }}"
                                               method="POST"
@@ -327,7 +352,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="8" class="px-4 py-10 text-center text-gray-400">
+                                    <td colspan="9" class="px-4 py-10 text-center text-gray-400">
                                         Noch keine Registrierungen vorhanden.
                                     </td>
                                 </tr>
@@ -340,8 +365,6 @@
                 <div class="md:hidden divide-y divide-gray-100">
                     @forelse ($registrations as $reg)
                         @php
-                            $deleteMsgMobile = 'Registrierung von ' . $reg->first_name . ' ' . $reg->last_name . ' wirklich löschen?';
-
                             $mobileStatusColors = [
                                 'green'  => 'text-green-600',
                                 'blue'   => 'text-blue-500',
@@ -350,7 +373,7 @@
                             ];
                             $mobileStatusCls   = $mobileStatusColors[$reg->access_status] ?? 'text-gray-500';
                             $mobileStatusLabel = $statusLabels[$reg->access_status]       ?? $reg->access_status;
-                            $deleteMsgMobile = 'Registrierung von ' . $reg->firstname . ' ' . $reg->lastname . ' wirklich löschen? Alle Check-ins werden mitgelöscht.';
+                            $deleteMsgMobile = 'Registrierung von ' . $reg->first_name . ' ' . $reg->last_name . ' wirklich löschen? Alle Check-ins werden mitgelöscht.';
                         @endphp
                         <div class="px-4 py-4 flex items-start justify-between gap-3">
                             <div class="flex-1 min-w-0">
@@ -364,6 +387,29 @@
                                 </div>
                                 <div class="text-xs font-medium mt-1 {{ $mobileStatusCls }}">{{ $mobileStatusLabel
                                 }}</div>
+                                <form action="{{ route('admin.registrations.notes', $reg) }}"
+                                      method="POST"
+                                      class="mt-3 flex flex-col gap-1.5 border-t border-gray-100 pt-3">
+                                    @csrf
+                                    @method('PATCH')
+                                    @if(filled($query ?? null))
+                                        <input type="hidden" name="q" value="{{ $query }}">
+                                    @endif
+                                    @if(filled($statusFilter ?? null))
+                                        <input type="hidden" name="status" value="{{ $statusFilter }}">
+                                    @endif
+                                    @if($registrations->currentPage() > 1)
+                                        <input type="hidden" name="page" value="{{ $registrations->currentPage() }}">
+                                    @endif
+                                    <label class="text-xs font-semibold text-gray-500">Notiz / Kurs</label>
+                                    <textarea name="notes" rows="2" maxlength="65535"
+                                        class="w-full border border-gray-200 rounded-md px-2 py-1 text-xs text-gray-800 focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                                        placeholder="z. B. Kurs Mo 18:00">{{ $reg->notes }}</textarea>
+                                    <button type="submit"
+                                        class="self-start text-xs font-semibold text-indigo-600 min-h-[40px] touch-manipulation">
+                                        Speichern
+                                    </button>
+                                </form>
                             </div>
                             <form action="{{ route('admin.registrations.destroy', $reg) }}"
                                   method="POST"

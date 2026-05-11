@@ -53,6 +53,7 @@ Route::middleware('admin')->prefix('admin')->name('admin.')->group(function () {
     Route::post('import-members', [AdminController::class, 'importMembers'])->name('importMembers');
     Route::get('export-checkins', [AdminController::class, 'exportCheckins'])->name('exportCheckins');
     Route::delete('registrations/{registration}', [AdminController::class, 'destroyRegistration'])->name('registrations.destroy');
+    Route::patch('registrations/{registration}/notes', [AdminController::class, 'updateRegistrationNotes'])->name('registrations.notes');
     Route::delete('inactive-members', [AdminController::class, 'deleteInactiveMembers'])->name('deleteInactiveMembers');
 });
 

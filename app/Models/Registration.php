@@ -33,6 +33,7 @@ use Illuminate\Database\Eloquent\Builder;
  * @property bool $parent_consent_received
  * @property \Illuminate\Support\Carbon|null $parent_consent_received_at
  * @property bool $supervision_confirmed
+ * @property string|null $notes
  * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Checkin> $checkins
  * @property-read int|null $checkins_count
  * @property-read \App\Models\Checkin|null $currentCheckin
@@ -55,6 +56,7 @@ use Illuminate\Database\Eloquent\Builder;
  * @method static Builder<static>|Registration whereLastName($value)
  * @method static Builder<static>|Registration whereManualExceptionReason($value)
  * @method static Builder<static>|Registration whereManualExceptionUntil($value)
+ * @method static Builder<static>|Registration whereNotes($value)
  * @method static Builder<static>|Registration whereMemberNumber($value)
  * @method static Builder<static>|Registration whereMemberType($value)
  * @method static Builder<static>|Registration whereNeedsParentConsent($value)
@@ -94,6 +96,7 @@ class Registration extends Model
         'parent_consent_received',
         'parent_consent_received_at',
         'supervision_confirmed',
+        'notes',
     ];
 
     protected $casts = [

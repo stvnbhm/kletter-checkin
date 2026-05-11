@@ -19,7 +19,8 @@ class StaffController extends Controller
                 $q->where(function ($sub) use ($query) {
                     $sub->where('first_name', 'like', '%' . $query . '%')
                         ->orWhere('last_name', 'like', '%' . $query . '%')
-                        ->orWhere('member_number', 'like', '%' . $query . '%');
+                        ->orWhere('member_number', 'like', '%' . $query . '%')
+                        ->orWhere('notes', 'like', '%' . $query . '%');
                 });
             })
             ->orderByDesc('created_at')
@@ -46,7 +47,7 @@ class StaffController extends Controller
 
         // Bereits eingecheckt?
         if ($registration->currentCheckin) {
-            return redirect()->route('staff')
+            return $this->redirectToStaff()
                 ->with('error', $registration->first_name . ' ' . $registration->last_name . ' ist bereits eingecheckt.');
         }
 
@@ -54,13 +55,13 @@ class StaffController extends Controller
 
         // ── HART GESPERRT ──────────────────────────────────────────────
         if ($registration->access_status === 'red') {
-            return redirect()->route('staff')
+            return $this->redirectToStaff()
                 ->with('error', 'Check-in verweigert – ' . $registration->first_name . ' hat keinen Zutritt (Status: rot).');
         }
 
         // Schnuppergast ab Besuch 4 (3 bereits absolviert) → gesperrt
         if ($registration->member_type === 'guest' && $visits >= 3) {
-            return redirect()->route('staff')
+            return $this->redirectToStaff()
                 ->with('error', 'Check-in verweigert – Schnupperlimit (3 Besuche) ausgeschöpft.');
         }
 
@@ -73,7 +74,7 @@ class StaffController extends Controller
         $reason = strip_tags(request('reason', ''));
 
         if ($requiresModal && $reason === '') {
-            return redirect()->route('staff')
+            return $this->redirectToStaff()
                 ->with('error', 'Check-in verweigert – Bestätigung mit Grund erforderlich.');
         }
 
@@ -88,13 +89,12 @@ class StaffController extends Controller
                     'access_status' => 'red',
                     'access_reason' => 'Mitgliedsnummer nicht im System – Limit erreicht',
                 ]);
-                return redirect()->route('staff')
+                return $this->redirectToStaff()
                     ->with('error', 'Check-in verweigert – Mitgliedsnummer nicht gefunden. Limit von 3 Besuchen ausgeschöpft.');
             }
         }
 
         // ── CHECK-IN DURCHFÜHREN ───────────────────────────────────────
-                // ── CHECK-IN DURCHFÜHREN ───────────────────────────────────────
         if ($reason !== '') {
             $registration->update([
                 'manual_exception_reason' => $reason,
@@ -136,7 +136,7 @@ class StaffController extends Controller
             }
         }
 
-        return redirect()->route('staff')
+        return $this->redirectToStaff()
             ->with('success', '✓ ' . $registration->first_name . ' ' . $registration->last_name . ' eingecheckt.');
     }
 
@@ -177,7 +177,7 @@ class StaffController extends Controller
             }
         }
 
-        return redirect()->route('staff')
+        return $this->redirectToStaff()
             ->with('success', '✓ ' . $count . ' ' . ($count === 1 ? 'Person' : 'Personen') . ' ausgecheckt.');
     }
 
@@ -189,14 +189,25 @@ class StaffController extends Controller
             'needs_parent_consent'       => false,
         ]);
 
-        return redirect()->route('staff')
+        return $this->redirectToStaff()
             ->with('success', 'Einverständniserklärung wurde bestätigt.');
     }
 
     public function importMembers(Request $request): RedirectResponse
     {
-        return redirect()->route('staff')
+        return $this->redirectToStaff()
             ->with('error', 'Import bitte über den Admin-Bereich durchführen.');
+    }
+
+    private function redirectToStaff(): RedirectResponse
+    {
+        $q = request('q');
+        $params = [];
+        if (is_string($q) && trim($q) !== '') {
+            $params['q'] = trim($q);
+        }
+
+        return redirect()->route('staff', $params);
     }
 
     private function parseCsvDate(?string $value): ?Carbon
