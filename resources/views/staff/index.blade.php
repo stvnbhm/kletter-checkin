@@ -872,12 +872,12 @@
         const now = ctx.currentTime + 0.02;
         const steps = type === 'success'
             ? [
-                { freq: 720, duration: 0.06, gain: 0.055 },
-                { freq: 930, duration: 0.08, gain: 0.045 },
+                { freq: 720, duration: 0.06, gain: 0.075 },
+                { freq: 930, duration: 0.08, gain: 0.065 },
             ]
             : [
-                { freq: 340, duration: 0.12, gain: 0.05 },
-                { freq: 280, duration: 0.12, gain: 0.04 },
+                { freq: 340, duration: 0.12, gain: 0.07 },
+                { freq: 280, duration: 0.12, gain: 0.06 },
             ];
 
         let cursor = now;
