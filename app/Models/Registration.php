@@ -142,7 +142,7 @@ class Registration extends Model
         return $this->currentCheckin !== null; // Greift auf die HasOne Relation zu
     }
 
-    protected function accessreason(): Attribute
+    protected function access_reason(): Attribute
     {
         return Attribute::make(
             get: function ($value) {
@@ -152,7 +152,7 @@ class Registration extends Model
                     $parts[] = $value;
                 }
 
-                if ($this->needssupervision) {
+                if ($this->needs_supervision) {
                     $parts[] = 'Unter 14 – Aufsicht erforderlich';
                 }
 

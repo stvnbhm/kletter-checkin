@@ -102,7 +102,7 @@
                 <div class="p-4">
                     {{-- Container: Auf Mobile untereinander (flex-col), ab Tablet nebeneinander (sm:flex-row) --}}
                     <div class="mb-3 flex flex-col sm:flex-row sm:items-center gap-3">
-                        
+
                         {{-- Gruppe 1: Label + Select --}}
                         <div class="flex items-center gap-3 flex-1">
                             <label for="camera-select" class="text-xs text-gray-500 whitespace-nowrap">Kamera:</label>
@@ -112,7 +112,7 @@
                                 <option value="">Wird geladen…</option>
                             </select>
                         </div>
-                
+
                         {{-- Gruppe 2: Starten + Stopp Buttons --}}
                         <div class="flex items-center gap-2">
                             <button onclick="startScanner()"
@@ -126,7 +126,7 @@
                                 Stopp
                             </button>
                         </div>
-                        
+
                     </div>
                     <div id="qr-reader"
                          class="rounded-lg overflow-hidden border border-gray-200 bg-gray-900"
@@ -872,12 +872,12 @@
         const now = ctx.currentTime + 0.02;
         const steps = type === 'success'
             ? [
-                { freq: 720, duration: 0.06, gain: 0.075 },
-                { freq: 930, duration: 0.08, gain: 0.065 },
+                { freq: 720, duration: 0.06, gain: 0.095 },
+                { freq: 930, duration: 0.08, gain: 0.085 },
             ]
             : [
-                { freq: 340, duration: 0.12, gain: 0.07 },
-                { freq: 280, duration: 0.12, gain: 0.06 },
+                { freq: 340, duration: 0.12, gain: 0.09 },
+                { freq: 280, duration: 0.12, gain: 0.08 },
             ];
 
         let cursor = now;
