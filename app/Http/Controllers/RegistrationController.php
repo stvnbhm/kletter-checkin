@@ -183,11 +183,6 @@ class RegistrationController extends Controller
         }
 
         if ($needsSupervision) {
-            $supervisionNote = 'Unter 14 – Aufsicht erforderlich';
-            $accessReason = $accessReason
-                ? $accessReason . ' · ' . $supervisionNote
-                : $supervisionNote;
-        
             // Status nur anpassen wenn nicht bereits schlechter (red bleibt red)
             if ($validated['member_type'] === 'member' && $accessStatus !== 'red') {
                 if (!$request->boolean('supervision_confirmed')) {

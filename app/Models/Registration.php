@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 
 /**
  * @property int $id
@@ -139,6 +140,26 @@ class Registration extends Model
     public function getIsCheckedInAttribute(): bool
     {
         return $this->currentCheckin !== null; // Greift auf die HasOne Relation zu
+    }
+
+    protected function accessreason(): Attribute
+    {
+        return Attribute::make(
+            get: function ($value) {
+                $parts = [];
+
+                if ($value) {
+                    $parts[] = $value;
+                }
+
+                if ($this->needssupervision) {
+                    $parts[] = 'Unter 14 – Aufsicht erforderlich';
+                }
+
+                return implode(' · ', $parts) ?: null;
+            },
+            set: fn ($value) => $value, // DB-Wert unverändert speichern
+        );
     }
 
     public function checkins(): HasMany
