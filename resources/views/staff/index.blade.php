@@ -157,25 +157,45 @@
             @endif
 
             {{-- ── Suche ────────────────────────────────────────────── --}}
-            <div class="mb-6 bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+            <div class="mb-6 rounded-xl border border-indigo-200 bg-indigo-50 p-4 shadow-sm">
                 <form method="GET" action="{{ route('staff') }}"
-                    class="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3">
-                    <div class="flex-1 min-w-0 sm:min-w-[280px]">
-                        <input type="text" name="q" value="{{ $query }}"
-                            placeholder="Name, Mitgliedsnummer oder Notiz suchen"
-                            class="block w-full border border-gray-300 rounded-lg px-3 py-2 text-sm
-                                   bg-white text-gray-900 focus:border-indigo-500 focus:ring-indigo-500">
+                    class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+
+                    <div class="flex-1 min-w-0 sm:min-w-[320px]">
+                        <label for="q" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-indigo-700">
+                            Suche
+                        </label>
+
+                        <div class="relative">
+                            <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-indigo-400">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
+                                    viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                        d="M21 21l-4.35-4.35m1.85-5.15a7 7 0 11-14 0a7 7 0 0114 0z" />
+                                </svg>
+                            </span>
+
+                            <input
+                                id="q"
+                                type="text"
+                                name="q"
+                                value="{{ $query }}"
+                                placeholder="Name oder Mitgliedsnummer suchen"
+                                class="block w-full rounded-lg border border-indigo-200 bg-white pl-10 pr-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+                            >
+                        </div>
                     </div>
+
                     <div class="flex gap-2 flex-col sm:flex-row">
-                        <button type="submit"
-                            class="inline-flex items-center justify-center bg-white border border-gray-300
-                                   rounded-lg px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition">
+                        <button
+                            type="submit"
+                            class="inline-flex items-center justify-center rounded-lg border border-transparent bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 transition">
                             Suchen
                         </button>
-                        <a href="{{ route('staff') }}"
-                            class="inline-flex items-center justify-center bg-white border border-gray-300
-                                   rounded-lg px-4 py-2 text-sm font-semibold text-gray-700
-                                   hover:bg-gray-50 transition no-underline">
+
+                        <a
+                            href="{{ route('staff') }}"
+                            class="inline-flex items-center justify-center rounded-lg border border-indigo-200 bg-white px-4 py-2.5 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 transition no-underline">
                             Zurücksetzen
                         </a>
                     </div>
@@ -263,11 +283,6 @@
                                         · {{ $registration->member_number }}
                                     @endif
                                 </div>
-                                @if(filled($registration->notes))
-                                    <div class="text-xs text-indigo-600 mt-1 font-medium">
-                                        {{ $registration->notes }}
-                                    </div>
-                                @endif
                             </div>
                             <div class="flex flex-col items-end gap-1 shrink-0">
                                 @if ($currentCheckin)
@@ -467,11 +482,6 @@
                                             {{ $registration->birth_date?->format('d.m.Y') ?? '—' }}
                                             · {{ $registration->member_type === 'guest' ? 'Gast' : 'Mitglied' }}
                                         </div>
-                                        @if(filled($registration->notes))
-                                            <div class="text-xs text-indigo-600 mt-1 font-medium max-w-xs">
-                                                {{ $registration->notes }}
-                                            </div>
-                                        @endif
                                     </td>
 
                                     <td class="px-4 py-4 align-top text-sm text-gray-600">
