@@ -5827,193 +5827,6 @@ class AutoCheckoutExpiredCheckins extends Command
 }
 ````
 
-## File: app/Models/Registration.php
-````php
-<?php
-
-namespace App\Models;
-
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Casts\Attribute;
-
-/**
- * @property int $id
- * @property string $first_name
- * @property string $last_name
- * @property \Illuminate\Support\Carbon|null $birth_date
- * @property string|null $email
- * @property string $member_type
- * @property string|null $member_number
- * @property bool $waiver_accepted
- * @property string $waiver_version
- * @property string $payment_status
- * @property string $access_status
- * @property string|null $access_reason
- * @property string|null $manual_exception_reason
- * @property \Illuminate\Support\Carbon|null $manual_exception_until
- * @property \Illuminate\Support\Carbon|null $checked_in_at
- * @property string $qr_token
- * @property \Illuminate\Support\Carbon|null $created_at
- * @property \Illuminate\Support\Carbon|null $updated_at
- * @property int $trial_visits_count
- * @property bool $needs_supervision
- * @property bool $needs_parent_consent
- * @property bool $parent_consent_received
- * @property \Illuminate\Support\Carbon|null $parent_consent_received_at
- * @property bool $supervision_confirmed
- * @property string|null $notes
- * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Checkin> $checkins
- * @property-read int|null $checkins_count
- * @property-read \App\Models\Checkin|null $currentCheckin
- * @property-read string $full_name
- * @property-read bool $is_checked_in
- * @property-read string $status_color
- * @property-read string $status_label
- * @property-read \App\Models\Member|null $member
- * @method static Builder<static>|Registration newModelQuery()
- * @method static Builder<static>|Registration newQuery()
- * @method static Builder<static>|Registration query()
- * @method static Builder<static>|Registration whereAccessReason($value)
- * @method static Builder<static>|Registration whereAccessStatus($value)
- * @method static Builder<static>|Registration whereBirthDate($value)
- * @method static Builder<static>|Registration whereCheckedInAt($value)
- * @method static Builder<static>|Registration whereCreatedAt($value)
- * @method static Builder<static>|Registration whereEmail($value)
- * @method static Builder<static>|Registration whereFirstName($value)
- * @method static Builder<static>|Registration whereId($value)
- * @method static Builder<static>|Registration whereLastName($value)
- * @method static Builder<static>|Registration whereManualExceptionReason($value)
- * @method static Builder<static>|Registration whereManualExceptionUntil($value)
- * @method static Builder<static>|Registration whereNotes($value)
- * @method static Builder<static>|Registration whereMemberNumber($value)
- * @method static Builder<static>|Registration whereMemberType($value)
- * @method static Builder<static>|Registration whereNeedsParentConsent($value)
- * @method static Builder<static>|Registration whereNeedsSupervision($value)
- * @method static Builder<static>|Registration whereParentConsentReceived($value)
- * @method static Builder<static>|Registration whereParentConsentReceivedAt($value)
- * @method static Builder<static>|Registration wherePaymentStatus($value)
- * @method static Builder<static>|Registration whereQrToken($value)
- * @method static Builder<static>|Registration whereSupervisionConfirmed($value)
- * @method static Builder<static>|Registration whereTrialVisitsCount($value)
- * @method static Builder<static>|Registration whereUpdatedAt($value)
- * @method static Builder<static>|Registration whereWaiverAccepted($value)
- * @method static Builder<static>|Registration whereWaiverVersion($value)
- * @mixin \Eloquent
- */
-class Registration extends Model
-{
-    protected $fillable = [
-        'first_name',
-        'last_name',
-        'birth_date',
-        'email',
-        'member_type',
-        'member_number',
-        'waiver_accepted',
-        'waiver_version',
-        'payment_status',
-        'access_status',
-        'qr_token',
-        'checked_in_at',
-        'manual_exception_reason',
-        'manual_exception_until',
-        'access_reason',
-        'trial_visits_count',
-        'needs_supervision',
-        'needs_parent_consent',
-        'parent_consent_received',
-        'parent_consent_received_at',
-        'supervision_confirmed',
-        'notes',
-    ];
-
-    protected $casts = [
-        'birth_date' => 'date',
-        'waiver_accepted' => 'boolean',
-        'checked_in_at' => 'datetime',
-        'manual_exception_until' => 'datetime',
-        'needs_supervision' => 'boolean',
-        'needs_parent_consent' => 'boolean',
-        'parent_consent_received' => 'boolean',
-        'parent_consent_received_at' => 'datetime',
-        'supervision_confirmed' => 'boolean',
-    ];
-
-    public function member(): BelongsTo
-    {
-        return $this->belongsTo(Member::class, 'member_number', 'member_number');
-    }
-
-    public function getFullNameAttribute(): string
-    {
-        return trim($this->first_name . ' ' . $this->last_name);
-    }
-
-    public function getStatusColorAttribute(): string
-    {
-        return $this->access_status;
-    }
-
-    public function getStatusLabelAttribute(): string
-    {
-        return match ($this->access_status) {
-            'green' => 'Mitglied aktiv',
-            'blue' => 'Schnuppergast ok',
-            'orange' => 'Warnung',
-            default => 'Kein Zutritt',
-        };
-    }
-
-    public function getIsCheckedInAttribute(): bool
-    {
-        return $this->currentCheckin !== null; // Greift auf die HasOne Relation zu
-    }
-
-    protected function accessreason(): Attribute
-    {
-        return Attribute::make(
-            get: function ($value) {
-                $parts = [];
-
-                if ($value) {
-                    $parts[] = $value;
-                }
-
-                if ($this->needssupervision) {
-                    $parts[] = 'Unter 14 – Aufsicht erforderlich';
-                }
-
-                return implode(' · ', $parts) ?: null;
-            },
-            set: fn ($value) => $value, // DB-Wert unverändert speichern
-        );
-    }
-
-    public function checkins(): HasMany
-    {
-        return $this->hasMany(Checkin::class);
-    }
-
-    /**
-     * Holt den aktuell offenen Check-in als echte HasOne Beziehung.
-     * Dadurch können wir es im Controller mit ->with('currentCheckin') laden!
-     */
-    public function currentCheckin(): HasOne
-    {
-        return $this->hasOne(Checkin::class)->ofMany(
-            ['checked_in_at' => 'max'],
-            function (Builder $query) {
-                $query->whereNull('checked_out_at');
-            }
-        );
-    }
-}
-````
-
 ## File: .gitignore
 ````
 *.log
@@ -6533,6 +6346,193 @@ echo "Update fertig!"
 ---
 
 *Kletterdom Check-in System · Deployment Guide · Stand Mai 2026*
+````
+
+## File: app/Models/Registration.php
+````php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
+
+/**
+ * @property int $id
+ * @property string $first_name
+ * @property string $last_name
+ * @property \Illuminate\Support\Carbon|null $birth_date
+ * @property string|null $email
+ * @property string $member_type
+ * @property string|null $member_number
+ * @property bool $waiver_accepted
+ * @property string $waiver_version
+ * @property string $payment_status
+ * @property string $access_status
+ * @property string|null $access_reason
+ * @property string|null $manual_exception_reason
+ * @property \Illuminate\Support\Carbon|null $manual_exception_until
+ * @property \Illuminate\Support\Carbon|null $checked_in_at
+ * @property string $qr_token
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property int $trial_visits_count
+ * @property bool $needs_supervision
+ * @property bool $needs_parent_consent
+ * @property bool $parent_consent_received
+ * @property \Illuminate\Support\Carbon|null $parent_consent_received_at
+ * @property bool $supervision_confirmed
+ * @property string|null $notes
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\Checkin> $checkins
+ * @property-read int|null $checkins_count
+ * @property-read \App\Models\Checkin|null $currentCheckin
+ * @property-read string $full_name
+ * @property-read bool $is_checked_in
+ * @property-read string $status_color
+ * @property-read string $status_label
+ * @property-read \App\Models\Member|null $member
+ * @method static Builder<static>|Registration newModelQuery()
+ * @method static Builder<static>|Registration newQuery()
+ * @method static Builder<static>|Registration query()
+ * @method static Builder<static>|Registration whereAccessReason($value)
+ * @method static Builder<static>|Registration whereAccessStatus($value)
+ * @method static Builder<static>|Registration whereBirthDate($value)
+ * @method static Builder<static>|Registration whereCheckedInAt($value)
+ * @method static Builder<static>|Registration whereCreatedAt($value)
+ * @method static Builder<static>|Registration whereEmail($value)
+ * @method static Builder<static>|Registration whereFirstName($value)
+ * @method static Builder<static>|Registration whereId($value)
+ * @method static Builder<static>|Registration whereLastName($value)
+ * @method static Builder<static>|Registration whereManualExceptionReason($value)
+ * @method static Builder<static>|Registration whereManualExceptionUntil($value)
+ * @method static Builder<static>|Registration whereNotes($value)
+ * @method static Builder<static>|Registration whereMemberNumber($value)
+ * @method static Builder<static>|Registration whereMemberType($value)
+ * @method static Builder<static>|Registration whereNeedsParentConsent($value)
+ * @method static Builder<static>|Registration whereNeedsSupervision($value)
+ * @method static Builder<static>|Registration whereParentConsentReceived($value)
+ * @method static Builder<static>|Registration whereParentConsentReceivedAt($value)
+ * @method static Builder<static>|Registration wherePaymentStatus($value)
+ * @method static Builder<static>|Registration whereQrToken($value)
+ * @method static Builder<static>|Registration whereSupervisionConfirmed($value)
+ * @method static Builder<static>|Registration whereTrialVisitsCount($value)
+ * @method static Builder<static>|Registration whereUpdatedAt($value)
+ * @method static Builder<static>|Registration whereWaiverAccepted($value)
+ * @method static Builder<static>|Registration whereWaiverVersion($value)
+ * @mixin \Eloquent
+ */
+class Registration extends Model
+{
+    protected $fillable = [
+        'first_name',
+        'last_name',
+        'birth_date',
+        'email',
+        'member_type',
+        'member_number',
+        'waiver_accepted',
+        'waiver_version',
+        'payment_status',
+        'access_status',
+        'qr_token',
+        'checked_in_at',
+        'manual_exception_reason',
+        'manual_exception_until',
+        'access_reason',
+        'trial_visits_count',
+        'needs_supervision',
+        'needs_parent_consent',
+        'parent_consent_received',
+        'parent_consent_received_at',
+        'supervision_confirmed',
+        'notes',
+    ];
+
+    protected $casts = [
+        'birth_date' => 'date',
+        'waiver_accepted' => 'boolean',
+        'checked_in_at' => 'datetime',
+        'manual_exception_until' => 'datetime',
+        'needs_supervision' => 'boolean',
+        'needs_parent_consent' => 'boolean',
+        'parent_consent_received' => 'boolean',
+        'parent_consent_received_at' => 'datetime',
+        'supervision_confirmed' => 'boolean',
+    ];
+
+    public function member(): BelongsTo
+    {
+        return $this->belongsTo(Member::class, 'member_number', 'member_number');
+    }
+
+    public function getFullNameAttribute(): string
+    {
+        return trim($this->first_name . ' ' . $this->last_name);
+    }
+
+    public function getStatusColorAttribute(): string
+    {
+        return $this->access_status;
+    }
+
+    public function getStatusLabelAttribute(): string
+    {
+        return match ($this->access_status) {
+            'green' => 'Mitglied aktiv',
+            'blue' => 'Schnuppergast ok',
+            'orange' => 'Warnung',
+            default => 'Kein Zutritt',
+        };
+    }
+
+    public function getIsCheckedInAttribute(): bool
+    {
+        return $this->currentCheckin !== null; // Greift auf die HasOne Relation zu
+    }
+
+    protected function access_reason(): Attribute
+    {
+        return Attribute::make(
+            get: function ($value) {
+                $parts = [];
+
+                if ($value) {
+                    $parts[] = $value;
+                }
+
+                if ($this->needs_supervision) {
+                    $parts[] = 'Unter 14 – Aufsicht erforderlich';
+                }
+
+                return implode(' · ', $parts) ?: null;
+            },
+            set: fn ($value) => $value, // DB-Wert unverändert speichern
+        );
+    }
+
+    public function checkins(): HasMany
+    {
+        return $this->hasMany(Checkin::class);
+    }
+
+    /**
+     * Holt den aktuell offenen Check-in als echte HasOne Beziehung.
+     * Dadurch können wir es im Controller mit ->with('currentCheckin') laden!
+     */
+    public function currentCheckin(): HasOne
+    {
+        return $this->hasOne(Checkin::class)->ofMany(
+            ['checked_in_at' => 'max'],
+            function (Builder $query) {
+                $query->whereNull('checked_out_at');
+            }
+        );
+    }
+}
 ````
 
 ## File: resources/views/register.blade.php
@@ -9102,7 +9102,7 @@ class AdminController extends Controller
                 <div class="p-4">
                     {{-- Container: Auf Mobile untereinander (flex-col), ab Tablet nebeneinander (sm:flex-row) --}}
                     <div class="mb-3 flex flex-col sm:flex-row sm:items-center gap-3">
-                        
+
                         {{-- Gruppe 1: Label + Select --}}
                         <div class="flex items-center gap-3 flex-1">
                             <label for="camera-select" class="text-xs text-gray-500 whitespace-nowrap">Kamera:</label>
@@ -9112,7 +9112,7 @@ class AdminController extends Controller
                                 <option value="">Wird geladen…</option>
                             </select>
                         </div>
-                
+
                         {{-- Gruppe 2: Starten + Stopp Buttons --}}
                         <div class="flex items-center gap-2">
                             <button onclick="startScanner()"
@@ -9126,7 +9126,7 @@ class AdminController extends Controller
                                 Stopp
                             </button>
                         </div>
-                        
+
                     </div>
                     <div id="qr-reader"
                          class="rounded-lg overflow-hidden border border-gray-200 bg-gray-900"
@@ -9282,18 +9282,15 @@ class AdminController extends Controller
                             </div>
                         </div>
 
-                        {{-- Zusatzinfos --}}
-                        @if ($registration->needs_parent_consent)
-                            <div class="text-xs text-gray-600 space-y-1 border-t border-gray-100 pt-2">
-                                <div>
-                                    Klettert alleine? – dann Formular nötig
-                                    (<a href="https://www.oetk-langenlois.at/fileadmin/Einverstaendniserklaerung-14-18.pdf"
-                                        target="_blank" rel="noopener noreferrer"
-                                        class="underline text-gray-500">PDF</a>)
-
-                                    @if ($registration->parent_consent_received)
-                                        <span class="text-gray-600">Jugendlicher 14–17 – darf auch alleine klettern</span>
-                                    @else
+                        {{-- ZUSATZINFOS --}}
+                        <td class="px-4 py-4 align-top text-sm text-gray-600">
+                            @if ($registration->needs_parent_consent && !$registration->parent_consent_received)
+                                <div class="text-xs text-gray-600 space-y-1 border-t border-gray-100 pt-2">
+                                    <div>
+                                        Klettert alleine? – dann Formular nötig
+                                        (<a href="https://www.oetk-langenlois.at/fileadmin/Einverstaendniserklaerung-14-18.pdf"
+                                            target="_blank" rel="noopener noreferrer"
+                                            class="underline text-gray-500">PDF</a>)
                                         <form method="POST" action="{{ route('staff.parent-consent', $registration) }}" class="inline">
                                             @csrf
                                             @if(filled($query ?? null))
@@ -9304,14 +9301,14 @@ class AdminController extends Controller
                                                 Formular erhalten
                                             </button>
                                         </form>
-                                    @endif
+                                    </div>
                                 </div>
-                            </div>
-                        @elseif (!$currentCheckin && $registration->access_reason)
-                            <div class="text-xs text-gray-500 border-t border-gray-100 pt-2">
-                                {{ $registration->access_reason }}
-                            </div>
-                        @endif
+                            @elseif (!$currentCheckin && $registration->access_reason)
+                                <div class="text-xs text-gray-500 border-t border-gray-100 pt-2">
+                                    {{ $registration->access_reason }}
+                                </div>
+                            @endif
+                        </td>
 
                         {{-- ── Aktion (Mobile) ──────────────────────────────── --}}
                         <div class="border-t border-gray-100 pt-3">
@@ -9496,35 +9493,30 @@ class AdminController extends Controller
 
                                     {{-- ZUSATZINFOS --}}
                                     <td class="px-4 py-4 align-top text-sm text-gray-600">
-                                      @if ($registration->needs_parent_consent)
-                                          <div class="text-xs text-gray-600 space-y-1 border-t border-gray-100 pt-2">
-                                              <div>
-                                                  Klettert alleine? – dann Formular nötig
-                                                  (<a href="https://www.oetk-langenlois.at/fileadmin/Einverstaendniserklaerung-14-18.pdf"
-                                                      target="_blank" rel="noopener noreferrer"
-                                                      class="underline text-gray-500">PDF</a>)
-
-                                                  @if ($registration->parent_consent_received)
-                                                      <span class="text-gray-600">Jugendlicher 14–17 – darf auch alleine klettern</span>
-                                                  @else
-                                                      <form method="POST" action="{{ route('staff.parent-consent', $registration) }}" class="inline">
-                                                          @csrf
-                                                          @if(filled($query ?? null))
-                                                              <input type="hidden" name="q" value="{{ $query }}">
-                                                          @endif
-                                                          <button type="submit"
-                                                              class="underline text-gray-600 bg-transparent border-none p-0 cursor-pointer text-xs">
-                                                              Formular erhalten
-                                                          </button>
-                                                      </form>
-                                                  @endif
-                                              </div>
-                                          </div>
-                                      @elseif (!$currentCheckin && $registration->access_reason)
-                                          <div class="text-xs text-gray-500 border-t border-gray-100 pt-2">
-                                              {{ $registration->access_reason }}
-                                          </div>
-                                      @endif
+                                        @if ($registration->needs_parent_consent && !$registration->parent_consent_received)
+                                            <div class="text-xs text-gray-600 space-y-1 border-t border-gray-100 pt-2">
+                                                <div>
+                                                    Klettert alleine? – dann Formular nötig
+                                                    (<a href="https://www.oetk-langenlois.at/fileadmin/Einverstaendniserklaerung-14-18.pdf"
+                                                        target="_blank" rel="noopener noreferrer"
+                                                        class="underline text-gray-500">PDF</a>)
+                                                    <form method="POST" action="{{ route('staff.parent-consent', $registration) }}" class="inline">
+                                                        @csrf
+                                                        @if(filled($query ?? null))
+                                                            <input type="hidden" name="q" value="{{ $query }}">
+                                                        @endif
+                                                        <button type="submit"
+                                                            class="underline text-gray-600 bg-transparent border-none p-0 cursor-pointer text-xs">
+                                                            Formular erhalten
+                                                        </button>
+                                                    </form>
+                                                </div>
+                                            </div>
+                                        @elseif (!$currentCheckin && $registration->access_reason)
+                                            <div class="text-xs text-gray-500 border-t border-gray-100 pt-2">
+                                                {{ $registration->access_reason }}
+                                            </div>
+                                        @endif
                                     </td>
 
                                     {{-- ── CHECK-IN AKTION (Desktop) ──────────────── --}}
@@ -9872,12 +9864,12 @@ class AdminController extends Controller
         const now = ctx.currentTime + 0.02;
         const steps = type === 'success'
             ? [
-                { freq: 720, duration: 0.06, gain: 0.075 },
-                { freq: 930, duration: 0.08, gain: 0.065 },
+                { freq: 720, duration: 0.06, gain: 0.095 },
+                { freq: 930, duration: 0.08, gain: 0.085 },
             ]
             : [
-                { freq: 340, duration: 0.12, gain: 0.07 },
-                { freq: 280, duration: 0.12, gain: 0.06 },
+                { freq: 340, duration: 0.12, gain: 0.09 },
+                { freq: 280, duration: 0.12, gain: 0.08 },
             ];
 
         let cursor = now;

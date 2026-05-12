@@ -142,7 +142,7 @@ class Registration extends Model
         return $this->currentCheckin !== null; // Greift auf die HasOne Relation zu
     }
 
-    protected function access_reason(): Attribute
+    protected function accessReason(): Attribute
     {
         return Attribute::make(
             get: function ($value) {
