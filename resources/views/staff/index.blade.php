@@ -285,20 +285,20 @@
                         {{-- ZUSATZINFOS --}}
                         <td class="px-4 py-4 align-top text-sm text-gray-600">
                             @if ($registration->needs_parent_consent && !$registration->parent_consent_received)
-                                <div class="text-xs text-gray-600 space-y-1 border-t border-gray-100 pt-2">
+                                <div class="text-xs text-gray-600 space-y-1">
                                     <div>
                                         Klettert alleine? – dann Formular nötig
                                         (<a href="https://www.oetk-langenlois.at/fileadmin/Einverstaendniserklaerung-14-18.pdf"
                                             target="_blank" rel="noopener noreferrer"
                                             class="underline text-gray-500">PDF</a>)
-                                        <form method="POST" action="{{ route('staff.parent-consent', $registration) }}" class="inline">
+                                        <form method="POST" action="{{ route('staff.parent-consent', $registration) }}" >
                                             @csrf
                                             @if(filled($query ?? null))
                                                 <input type="hidden" name="q" value="{{ $query }}">
                                             @endif
                                             <button type="submit"
                                                 class="underline text-gray-600 bg-transparent border-none p-0 cursor-pointer text-xs">
-                                                Formular erhalten
+                                                Formular ausgefüllt erhalten?
                                             </button>
                                         </form>
                                     </div>
