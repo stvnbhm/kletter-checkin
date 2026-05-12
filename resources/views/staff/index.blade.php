@@ -282,18 +282,15 @@
                             </div>
                         </div>
 
-                        {{-- Zusatzinfos --}}
-                        @if ($registration->needs_parent_consent)
-                            <div class="text-xs text-gray-600 space-y-1 border-t border-gray-100 pt-2">
-                                <div>
-                                    Klettert alleine? – dann Formular nötig
-                                    (<a href="https://www.oetk-langenlois.at/fileadmin/Einverstaendniserklaerung-14-18.pdf"
-                                        target="_blank" rel="noopener noreferrer"
-                                        class="underline text-gray-500">PDF</a>)
-
-                                    @if ($registration->parent_consent_received)
-                                        <span class="text-gray-600">Jugendlicher 14–17 – darf auch alleine klettern</span>
-                                    @else
+                        {{-- ZUSATZINFOS --}}
+                        <td class="px-4 py-4 align-top text-sm text-gray-600">
+                            @if ($registration->needs_parent_consent && !$registration->parent_consent_received)
+                                <div class="text-xs text-gray-600 space-y-1 border-t border-gray-100 pt-2">
+                                    <div>
+                                        Klettert alleine? – dann Formular nötig
+                                        (<a href="https://www.oetk-langenlois.at/fileadmin/Einverstaendniserklaerung-14-18.pdf"
+                                            target="_blank" rel="noopener noreferrer"
+                                            class="underline text-gray-500">PDF</a>)
                                         <form method="POST" action="{{ route('staff.parent-consent', $registration) }}" class="inline">
                                             @csrf
                                             @if(filled($query ?? null))
@@ -304,14 +301,14 @@
                                                 Formular erhalten
                                             </button>
                                         </form>
-                                    @endif
+                                    </div>
                                 </div>
-                            </div>
-                        @elseif (!$currentCheckin && $registration->access_reason)
-                            <div class="text-xs text-gray-500 border-t border-gray-100 pt-2">
-                                {{ $registration->access_reason }}
-                            </div>
-                        @endif
+                            @elseif (!$currentCheckin && $registration->access_reason)
+                                <div class="text-xs text-gray-500 border-t border-gray-100 pt-2">
+                                    {{ $registration->access_reason }}
+                                </div>
+                            @endif
+                        </td>
 
                         {{-- ── Aktion (Mobile) ──────────────────────────────── --}}
                         <div class="border-t border-gray-100 pt-3">
@@ -496,35 +493,30 @@
 
                                     {{-- ZUSATZINFOS --}}
                                     <td class="px-4 py-4 align-top text-sm text-gray-600">
-                                      @if ($registration->needs_parent_consent)
-                                          <div class="text-xs text-gray-600 space-y-1 border-t border-gray-100 pt-2">
-                                              <div>
-                                                  Klettert alleine? – dann Formular nötig
-                                                  (<a href="https://www.oetk-langenlois.at/fileadmin/Einverstaendniserklaerung-14-18.pdf"
-                                                      target="_blank" rel="noopener noreferrer"
-                                                      class="underline text-gray-500">PDF</a>)
-
-                                                  @if ($registration->parent_consent_received)
-                                                      <span class="text-gray-600">Jugendlicher 14–17 – darf auch alleine klettern</span>
-                                                  @else
-                                                      <form method="POST" action="{{ route('staff.parent-consent', $registration) }}" class="inline">
-                                                          @csrf
-                                                          @if(filled($query ?? null))
-                                                              <input type="hidden" name="q" value="{{ $query }}">
-                                                          @endif
-                                                          <button type="submit"
-                                                              class="underline text-gray-600 bg-transparent border-none p-0 cursor-pointer text-xs">
-                                                              Formular erhalten
-                                                          </button>
-                                                      </form>
-                                                  @endif
-                                              </div>
-                                          </div>
-                                      @elseif (!$currentCheckin && $registration->access_reason)
-                                          <div class="text-xs text-gray-500 border-t border-gray-100 pt-2">
-                                              {{ $registration->access_reason }}
-                                          </div>
-                                      @endif
+                                        @if ($registration->needs_parent_consent && !$registration->parent_consent_received)
+                                            <div class="text-xs text-gray-600 space-y-1 border-t border-gray-100 pt-2">
+                                                <div>
+                                                    Klettert alleine? – dann Formular nötig
+                                                    (<a href="https://www.oetk-langenlois.at/fileadmin/Einverstaendniserklaerung-14-18.pdf"
+                                                        target="_blank" rel="noopener noreferrer"
+                                                        class="underline text-gray-500">PDF</a>)
+                                                    <form method="POST" action="{{ route('staff.parent-consent', $registration) }}" class="inline">
+                                                        @csrf
+                                                        @if(filled($query ?? null))
+                                                            <input type="hidden" name="q" value="{{ $query }}">
+                                                        @endif
+                                                        <button type="submit"
+                                                            class="underline text-gray-600 bg-transparent border-none p-0 cursor-pointer text-xs">
+                                                            Formular erhalten
+                                                        </button>
+                                                    </form>
+                                                </div>
+                                            </div>
+                                        @elseif (!$currentCheckin && $registration->access_reason)
+                                            <div class="text-xs text-gray-500 border-t border-gray-100 pt-2">
+                                                {{ $registration->access_reason }}
+                                            </div>
+                                        @endif
                                     </td>
 
                                     {{-- ── CHECK-IN AKTION (Desktop) ──────────────── --}}
