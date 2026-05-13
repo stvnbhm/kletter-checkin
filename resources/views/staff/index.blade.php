@@ -372,9 +372,9 @@
                                     @if(filled($query ?? null))
                                         <input type="hidden" name="q" value="{{ $query }}">
                                     @endif
-                                    <button type="submit" class="w-full inline-flex items-center justify-center border border-transparent
-                            	                                   bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold
-                            	                                   hover:bg-indigo-700 transition min-h-[44px] touch-manipulation">
+                                    <button type="submit" class="w-full inline-flex items-center justify-center rounded-lg border border-indigo-200
+                                                                bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700
+                                                                hover:bg-indigo-100 hover:border-indigo-300 transition min-h-[44px] touch-manipulation">
                                        Check-in
                                     </button>
                                 </form>
@@ -576,9 +576,9 @@
                                                 @if(filled($query ?? null))
                                                     <input type="hidden" name="q" value="{{ $query }}">
                                                 @endif
-                                                <button type="submit" class="w-full inline-flex items-center justify-center border border-transparent
-                                        	                                   bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold
-                                        	                                   hover:bg-indigo-700 transition min-h-[44px] touch-manipulation">
+                                                <button type="submit" class="w-full inline-flex items-center justify-center rounded-lg border border-indigo-200
+       bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700
+       hover:bg-indigo-100 hover:border-indigo-300 transition min-h-[44px] touch-manipulation">
                                                    Check-in
                                                 </button>
                                             </form>
