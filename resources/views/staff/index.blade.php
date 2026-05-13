@@ -277,15 +277,13 @@
                                 <div class="text-sm font-semibold text-gray-900">
                                     {{ $registration->first_name }} {{ $registration->last_name }}
                                 </div>
-                                <div class="text-xs text-gray-400 mt-0.5">
-    Registriert am {{ $registration->created_at?->format('d.m.Y') ?? '—' }}
-    · {{ $registration->member_type === 'guest' ? 'Gast' : 'Mitglied' }}
-    @if ($registration->member_number)
-        · {{ $registration->member_number }}
-    @endif
-</div>
-
-
+                                    <div class="text-xs text-gray-400 mt-0.5">
+                                        Registriert am {{ $registration->created_at?->format('d.m.Y') ?? '—' }}
+                                        · {{ $registration->member_type === 'guest' ? 'Gast' : 'Mitglied' }}
+                                        @if ($registration->member_number)
+                                        · {{ $registration->member_number }}
+                                        @endif
+                                </div>
                             </div>
                             <div class="flex flex-col items-end gap-1 shrink-0">
                                 @if ($currentCheckin)
