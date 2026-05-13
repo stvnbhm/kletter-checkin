@@ -157,50 +157,51 @@
             @endif
 
             {{-- ── Suche ────────────────────────────────────────────── --}}
-            <div class="mb-6 rounded-xl border border-indigo-200 bg-indigo-50 p-4 shadow-sm">
+            <div class="mb-6 rounded-xl border border-orange-200 bg-orange-50 p-4 shadow-sm">
                 <form method="GET" action="{{ route('staff') }}"
                     class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
-
+            
                     <div class="flex-1 min-w-0 sm:min-w-[320px]">
-                        <label for="q" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-indigo-700">
+                        <label for="q" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-orange-700">
                             Suche
                         </label>
-
+            
                         <div class="relative">
-                            <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-indigo-400">
+                            <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-orange-400">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
                                     viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                     <path stroke-linecap="round" stroke-linejoin="round"
                                         d="M21 21l-4.35-4.35m1.85-5.15a7 7 0 11-14 0a7 7 0 0114 0z" />
                                 </svg>
                             </span>
-
+            
                             <input
                                 id="q"
                                 type="text"
                                 name="q"
                                 value="{{ $query }}"
                                 placeholder="Name oder Mitgliedsnummer suchen"
-                                class="block w-full rounded-lg border border-indigo-200 bg-white pl-10 pr-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+                                class="block w-full rounded-lg border border-orange-200 bg-white py-2.5 pl-10 pr-3 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
                             >
                         </div>
                     </div>
-
+            
                     <div class="flex gap-2 flex-col sm:flex-row">
                         <button
                             type="submit"
-                            class="inline-flex items-center justify-center rounded-lg border border-transparent bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 transition">
+                            class="inline-flex items-center justify-center rounded-lg border border-transparent bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-700">
                             Suchen
                         </button>
-
+            
                         <a
                             href="{{ route('staff') }}"
-                            class="inline-flex items-center justify-center rounded-lg border border-indigo-200 bg-white px-4 py-2.5 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 transition no-underline">
+                            class="inline-flex items-center justify-center rounded-lg border border-orange-200 bg-white px-4 py-2.5 text-sm font-semibold text-orange-700 transition hover:bg-orange-100 no-underline">
                             Zurücksetzen
                         </a>
                     </div>
                 </form>
             </div>
+
 
             {{-- ============================================================ --}}
             {{-- Mobile Cards                                                  --}}
@@ -359,9 +360,9 @@
                                         '{{ $pastCheckinDates ? $pastCheckinDates : '' }}',
                                         '{{ e($registration->manual_exception_reason ?? '') }}'
                                     )"
-                                    class="w-full inline-flex items-center justify-center border border-transparent
-                                           bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold
-                                           hover:bg-indigo-700 transition min-h-[44px] touch-manipulation">
+                                    class="w-full inline-flex items-center justify-center rounded-lg border border-indigo-200
+                                       bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700
+                                       hover:bg-indigo-100 hover:border-indigo-300 transition min-h-[44px] touch-manipulation"
                                     Check-in
                                 </button>
 
@@ -563,9 +564,9 @@
                                                     '{{ $pastCheckinDates ? $pastCheckinDates : '' }}',
                                                     '{{ e($registration->manual_exception_reason ?? '') }}'
                                                 )"
-                                                class="w-full inline-flex items-center justify-center border border-transparent
-                                                       bg-indigo-600 text-white rounded-lg px-3 py-2 text-sm font-semibold
-                                                       hover:bg-indigo-700 transition min-h-[44px] touch-manipulation">
+                                                class="w-full inline-flex items-center justify-center rounded-lg border border-indigo-200
+                                                   bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700
+                                                   hover:bg-indigo-100 hover:border-indigo-300 transition min-h-[44px] touch-manipulation"
                                                 Check-in
                                             </button>
 
